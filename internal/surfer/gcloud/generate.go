@@ -172,6 +172,8 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 		// release track. For now, we are hardcoding to the "ga" track.
 		// Example: "_create_ga.yaml"
 		// TODO(https://github.com/googleapis/librarian/issues/3037): generate multiple tracks
+		// TODO(coryan): move the hardcoded `ga` track to a constant.
+				// TODO(coryan): Maybe a `const` at the top of the file?
 		track := "ga"
 		partialFileName := fmt.Sprintf("_%s_%s.yaml", verb, track)
 		partialCmdPath := filepath.Join(partialsDir, partialFileName)
@@ -211,7 +213,8 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 		cmd.HelpText = HelpText{
 			Brief:       rule.HelpText.Brief,
 			Description: rule.HelpText.Description,
-			Examples:    rule.HelpText.Examples[0], //TODO(https://github.com/googleapis/librarian/issues/3035): add all examples
+			Examples:    rule.HelpText.Examples[0], // TODO(gemini-code-assist[bot]): Accessing `rule.HelpText.Examples[0]` directly will cause a panic if the `Examples` slice is empty. It's safer to check if the slice has any elements before trying to access the first one.
+			//TODO(https://github.com/googleapis/librarian/issues/3035): add all examples
 		}
 	}
 
@@ -529,7 +532,7 @@ func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
 				return msg.Resource
 			}
 		}
-	} else {
+	} else { // TODO(gemini-code-assist[bot]): This `else` block is empty and can be removed to improve code clarity.
 	}
 
 	// Strategy 2: For `Get`, `Delete`, and `List` methods, the request message
@@ -569,7 +572,7 @@ func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
 func newRequest(method *api.Method, cfg *Config, model *api.API) *Request {
 	return &Request{
 		APIVersion: apiVersion(cfg),
-		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))},
+		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))}, // TODO(gemini-code-assist[bot]): The collection path is partially hardcoded to `parallelstore.projects.locations.%s`. This will prevent the generator from working correctly for any service other than `parallelstore`. The collection path should be constructed dynamically from the resource's pattern and the service name from the configuration, similar to how it's done in `newPrimaryResourceParam`.
 	}
 }
 

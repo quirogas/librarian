@@ -752,7 +752,7 @@ type Field struct {
 	// - For OpenAPI, it has format == "uuid"
 	AutoPopulated bool
 	// IsResourceReference is true if the field is annotated with google.api.resource_reference.
-	IsResourceReference bool
+	// TODO(coryan): This looks redundant now. If we are going to add `ResourceReference` then we should add a helper: func (f *field) IsResourceReference() bool { return f.ResourceReference != nil }
 	// FieldBehavior indicates how the field behaves in requests and responses.
 	//
 	// For example, that a field is required in requests, or given as output
@@ -767,11 +767,13 @@ type Field struct {
 	MessageType *Message
 	// The enum type for this field, can be nil.
 	EnumType *Enum
-	// A placeholder to put language specific annotations.
-	Codec any
+	// The enum type for this field, can be nil.
+	EnumType *Enum
 	// ResourceReference contains the data from the `google.api.resource_reference`
 	// annotation.
 	ResourceReference *ResourceReference
+	// TODO(coryan): So far we have kept the `Codec any` entry last, no good reason, but no good reason to break away from that either I think? Also in some other structs.
+	Codec any
 }
 
 // FieldParent returns the Parent field with an alternative name.
@@ -898,22 +900,28 @@ type OneOf struct {
 	Codec any
 }
 
-// Resource contains the data from the `google.api.resource` annotation.
+// Resource contains metadata about a Google Cloud resource, derived from API definitions.
+// TODO(coryan): Is there a way to describe this without referring to the Protobuf annotation? Logically, what is this? If we switched to OpenAPI, what would these represent?
 type Resource struct {
-	// Type is the resource type.
+	// Type is the resource type identifier.
+	// TODO(coryan): That comment is not very useful. Can you say something about where the namespace for these types? Are they always messages in the current data model? Could they be imported from a different data model?
 	Type string
 	// Pattern is the resource name pattern.
 	Pattern []string
 	// Plural is the plural form of the resource name.
+	// TODO(coryan): For example, for the `Shoe` resource it would be `shoes` and the `Foot` resource `feet`.
 	Plural string
 	// Singular is the singular form of the resource name.
+	// TODO(coryan): For example, for the `Shoe` resource it would be `shoe` and the `Foot` resource `foot`.
 	Singular string
 
 	Self *Message
+	// TODO(coryan): Leave room for the codecs to annotate these things. Add `Codec any`.
+	Codec any
 }
 
-// ResourceReference contains the data from the `google.api.resource_reference`
-// annotation.
+// ResourceReference contains metadata about a field that references another Google Cloud resource.
+// TODO(coryan): As above, make these comments meaningful, not just "not empty".
 type ResourceReference struct {
 	// Type is the resource type that the field references.
 	Type string
@@ -922,6 +930,7 @@ type ResourceReference struct {
 	ChildType string
 }
 
+// TODO(coryan): This is very similar to `.ID`, why do we need both?
 // FullName returns the fully qualified name of the method.
 func (m *Method) FullName() string {
 	return m.Service.Package + "." + m.Service.Name + "." + m.Name

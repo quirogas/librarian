@@ -26,6 +26,7 @@ var (
 )
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case.
+// TODO(julieqiu): Use https://github.com/iancoleman/strcase, since we already use that package for sidekick for the same purpose
 // This is a common utility for converting API field names to a more
 // command-line friendly format.
 // For example, "apiFieldName" becomes "api_field_name".
