@@ -214,9 +214,7 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 		cmd.HelpText = HelpText{
 			Brief:       rule.HelpText.Brief,
 			Description: rule.HelpText.Description,
-			// TODO(gemini-code-assist[bot]): Check if examples slice is empty before accessing index 0.
-			// TODO(gemini-code-assist[bot]): Accessing `rule.HelpText.Examples[0]` directly will cause a panic if the `Examples` slice is empty. It's safer to check if the slice has any elements before trying to access the first one.
-			Examples: rule.HelpText.Examples[0], //TODO(https://github.com/googleapis/librarian/issues/3035): add all examples
+			Examples:    strings.Join(rule.HelpText.Examples, "\n\n"),
 		}
 	}
 
