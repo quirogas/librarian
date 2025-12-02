@@ -169,24 +169,22 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 			return fmt.Errorf("failed to write main command file for %q: %w", method.Name, err)
 		}
 
-		// We define the name of the partial file, which includes the verb and the
-		// release track. For now, we are hardcoding to the "ga" track.
-		// Example: "_create_ga.yaml"
-		// TODO(https://github.com/googleapis/librarian/issues/3037): generate multiple tracks
-		// TODO(coryan): Maybe a `const` at the top of the file?
-		track := "ga"
-		partialFileName := fmt.Sprintf("_%s_%s.yaml", verb, track)
-		partialCmdPath := filepath.Join(partialsDir, partialFileName)
+		// Generate a partial file for each release track.
+		for _, track := range cmd.ReleaseTracks {
+			trackName := strings.ToLower(track)
+			partialFileName := fmt.Sprintf("_%s_%s.yaml", verb, trackName)
+			partialCmdPath := filepath.Join(partialsDir, partialFileName)
 
-		// We marshal the command definition struct into YAML format.
-		b, err := yaml.Marshal(cmdList)
-		if err != nil {
-			return fmt.Errorf("failed to marshal partial command for %q: %w", method.Name, err)
-		}
+			// We marshal the command definition struct into YAML format.
+			b, err := yaml.Marshal(cmdList)
+			if err != nil {
+				return fmt.Errorf("failed to marshal partial command for %q: %w", method.Name, err)
+			}
 
-		// Finally, we write the generated YAML to the partial file.
-		if err := os.WriteFile(partialCmdPath, b, 0644); err != nil {
-			return fmt.Errorf("failed to write partial command file for %q: %w", method.Name, err)
+			// Finally, we write the generated YAML to the partial file.
+			if err := os.WriteFile(partialCmdPath, b, 0644); err != nil {
+				return fmt.Errorf("failed to write partial command file for %q: %w", method.Name, err)
+			}
 		}
 	}
 	return nil
@@ -199,7 +197,6 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 	// We look up the help text and API definition for this specific method in the
 	// `gcloud.yaml` configuration file.
 	rule := findHelpTextRule(method, cfg)
-	apiDef := findAPI(method, cfg)
 	//TODO(https://github.com/googleapis/librarian/issues/3035): parse exaples from `gcloud.yaml`
 
 	// We initialize the command with some default values.
@@ -218,12 +215,10 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 		}
 	}
 
-	// If an API definition was found, we apply the specified release tracks.
-	if apiDef != nil {
-		for _, track := range apiDef.ReleaseTracks {
-			cmd.ReleaseTracks = append(cmd.ReleaseTracks, string(track))
-		}
-	}
+	// Infer default release track from proto package.
+	// TODO(issue/allow_config_override_for_tracks.md): Allow gcloud config to overwrite the track for this command.
+	inferredTrack := inferTrackFromPackage(method.Service.Package)
+	cmd.ReleaseTracks = []string{strings.ToUpper(inferredTrack)}
 
 	// The core of the command generation happens here: we generate the arguments,
 	// request details, and async configuration.
@@ -753,4 +748,22 @@ func getCollectionPathFromPattern(pattern string) string {
 		}
 	}
 	return strings.Join(collectionParts, ".")
+}
+
+// inferTrackFromPackage infers the release track from the proto package name.
+// as mandated per AIP-185
+// e.g. "google.cloud.parallelstore.v1beta" -> "beta"
+func inferTrackFromPackage(pkg string) string {
+	parts := strings.Split(pkg, ".")
+	if len(parts) == 0 {
+		return "ga"
+	}
+	version := parts[len(parts)-1]
+	if strings.Contains(version, "alpha") {
+		return "alpha"
+	}
+	if strings.Contains(version, "beta") {
+		return "beta"
+	}
+	return "ga"
 }
