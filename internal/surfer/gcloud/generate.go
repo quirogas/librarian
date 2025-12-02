@@ -532,8 +532,6 @@ func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
 				return msg.Resource
 			}
 		}
-	} else {
-		// TODO(gemini-code-assist[bot]): This `else` block is empty and can be removed to improve code clarity.
 	}
 
 	// Strategy 2: For `Get`, `Delete`, and `List` methods, the request message
