@@ -78,8 +78,8 @@ type Param struct {
 	// ArgName is the name of the argument as it appears on the command line
 	// (e.g., "instance-id").
 	// Origin: Derived from the proto field name, converted to kebab-case.
-	// TODO(sarahheacock): Are arg groups specified somewhere?
-	// TODO(sarahheacock): Noting for future reference--the arg_name is also sometimes prefixed with the path to prevent flag name collisions
+	// TODO(issues/arg_groups_in_gcloud_commands.md): Support arg groups.
+	// TODO(issues/arg_name_collision_prevention.md): Handle arg name collisions with path prefixes.
 	ArgName string `yaml:"arg_name,omitempty"`
 	// APIField is the dot-separated path to the field in the API request message
 	// that this argument's value should be placed in (e.g., "instance.name").
@@ -150,9 +150,7 @@ type Choice struct {
 type ResourceSpec struct {
 	// Name is the singular name of the resource (e.g., "instance").
 	// Origin: Inferred from the last variable segment of a resource pattern (e.g., `{instance}`).
-	// TODO(sarahheacock): One thing I wish we did in gen_sfc a little better was not quietly fail.
-	//	The earlier we can fail, easier the issue is to debug. I'm not as familiar with golang but we
-	//  will want to be thoughtful about when we omitempty vs raise an error
+	// TODO(issues/resource_spec_robust_error_handling.md): Implement robust error handling instead of quiet failures.
 	Name string `yaml:"name,omitempty"`
 	// PluralName is the plural name of the resource (e.g., "instances").
 	// Origin: Derived from the `plural` field in the `(google.api.resource)` annotation, or
