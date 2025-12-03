@@ -565,7 +565,7 @@ func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
 
 // newRequest creates the `Request` part of the command definition.
 func newRequest(method *api.Method, cfg *Config, model *api.API) *Request {
-	// TODO(gemini-code-assist[bot]): The collection path is partially hardcoded to `parallelstore.projects.locations.%s`. This will prevent the generator from working correctly for any service other than `parallelstore`. The collection path should be constructed dynamically from the resource's pattern and the service name from the configuration, similar to how it's done in `newPrimaryResourceParam`.
+	// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
 	return &Request{
 		APIVersion: apiVersion(cfg),
 		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))},
@@ -575,7 +575,7 @@ func newRequest(method *api.Method, cfg *Config, model *api.API) *Request {
 // newAsync creates the `Async` part of the command definition for long-running operations.
 func newAsync(method *api.Method, cfg *Config) *Async {
 	return &Async{
-		// TODO(gemini-code-assist[bot]): The collection path is partially hardcoded to `parallelstore.projects.locations.operations`. This will prevent the generator from working correctly for any service other than `parallelstore`. The collection path should be constructed dynamically from the resource's pattern and the service name from the configuration, similar to how it's done in `newPrimaryResourceParam`.
+		// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
 		Collection: []string{"parallelstore.projects.locations.operations"},
 	}
 }
