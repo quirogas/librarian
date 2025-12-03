@@ -43,18 +43,25 @@ func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList
 	}
 
 	// We need the short service name (e.g., "parallelstore") to use as the root
-	// directory for the generated command surface. We derive this from the `name`
-	// of the first API definition in the `gcloud.yaml` file.
-	// Example: "Parallelstore" -> "parallelstore"
-	if len(cfg.APIs) == 0 {
-		// TODO(sarahheacock): I don't believe we require users to specify and api in gcloud.yaml
-		return fmt.Errorf("no APIs defined in gcloud.yaml")
+	// directory for the generated command surface. We derive this from the `default_host`
+	// annotation of the first service in the API model. Example: "parallelstore.googleapis.com" -> "parallelstore"
+	shortServiceName := ""
+	if len(model.Services) > 0 {
+		// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
+		hostParts := strings.Split(model.Services[0].DefaultHost, ".")
+		if len(hostParts) > 0 {
+			shortServiceName = hostParts[0]
+		}
 	}
-	shortServiceName := strings.ToLower(cfg.APIs[0].Name)
+	// Fallback to gcloud config if default_host is not available or model.Services is empty.
+	if shortServiceName == "" && len(cfg.APIs) > 0 {
+		// TODO(sarahheacock): I don't believe we require users to specify and api in gcloud.yaml
+		shortServiceName = strings.ToLower(cfg.APIs[0].Name)
+	}
 
 	// The final output will be placed in a directory structure like:
-	// `{outdir}/{shortServiceName}/surface/`
-	surfaceDir := filepath.Join(output, shortServiceName, "surface")
+	// `{outdir}/{shortServiceName}/`
+	surfaceDir := filepath.Join(output, shortServiceName)
 
 	// gcloud commands are resource-centric commands (e.g., `gcloud parallelstore instances create`),
 	// so we first need to group all the API methods by the resource they operate on.
@@ -359,7 +366,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 
 // newPrimaryResourceParam creates the main positional resource argument for a command.
 // This is the argument that represents the resource being acted upon (e.g., the instance name).
-func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, cfg *Config) Param {
+func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, _ *Config) Param {
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
 	pattern := ""
@@ -370,7 +377,9 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// We construct the gcloud collection path from the resource's pattern string.
 	// Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
 	collectionPath := getCollectionPathFromPattern(pattern)
-	shortServiceName := strings.Split(cfg.ServiceName, ".")[0]
+	// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
+	hostParts := strings.Split(model.Services[0].DefaultHost, ".")
+	shortServiceName := hostParts[0]
 
 	// We determine the singular name of the resource.
 	// For `Create` methods, this comes from the `_id` field. For others, it's the `name` field.
@@ -424,8 +433,11 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, cfg *Config) *Re
 			// We determine the singular name from the pattern.
 			name := getSingularFromPattern(pattern)
 
-			// We construct the full gcloud collection path for the referenced resource.
-			shortServiceName := strings.Split(cfg.ServiceName, ".")[0]
+			// We construct the full gcloud collection path for the referenced resource
+			//assuming the current service is the current command.
+			// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
+			hostParts := strings.Split(model.Services[0].DefaultHost, ".")
+			shortServiceName := hostParts[0]
 			baseCollectionPath := getCollectionPathFromPattern(pattern)
 			fullCollectionPath := fmt.Sprintf("%s.%s", shortServiceName, baseCollectionPath)
 
