@@ -1,7 +1,9 @@
 # Surfer (POC)
+
 <!-- TODO(julieqiu): We keep all docs in doc/ 
 
 Move this to doc/surfer.md -->
+
 <!-- TODO(coryan): Reflow, consider using `mdformat` -->
 
 This directory contains the source code for the `gcloud` command generator, now a standalone tool named `Surfer`. This tool parses `Protobuf API` definitions and a `gcloud.yaml` configuration file to generate a complete `gcloud` command surface, including commands, flags, and help text.
@@ -10,8 +12,7 @@ This directory contains the source code for the `gcloud` command generator, now 
 
 This guide provides a simple, self-contained way to run the generator for quick testing and iteration.
 
-### 1. Setting Up the Test Environment
-<!-- TODO(coryan): Sections are not numbered, decide if this is a section or a numbered list. -->
+### Setting Up the Test Environment
 
 A helper script is provided to automate the setup of a local test environment.
 
@@ -23,18 +24,16 @@ bash ./librarian/internal/surfer/scripts/setup_test_env.sh
 
 This script will create a `test_env` directory in the `librarian` project root, clone the necessary `googleapis` repository, and create a `test.sh` script inside `test_env` for running the generator.
 
-### 2. Running the Generator
+### Running the Generator
 
 Once the setup is complete, you can easily build and run the generator:
 
-1.  **Run the test script:**
-    <!-- TODO(coryan): Why is this numbered if there is a single command to run? -->
+**Run the test script:**
 
-    ```bash
-    ./test_env/test.sh
-    ```
+```bash
+./test_env/test.sh
+```
 
-### 3. Verifying the Output
+### Verifying the Output
 
 The `test.sh` script will build the `surfer-dev` binary inside `test_env/bin` and then run it. The generated command surface will be created in a new `parallelstore` directory within the `test_env`.
-
