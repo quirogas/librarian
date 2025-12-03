@@ -25,6 +25,7 @@ import (
 	"github.com/googleapis/librarian/internal/sidekick/api"
 	"github.com/googleapis/librarian/internal/sidekick/config"
 	"github.com/googleapis/librarian/internal/sidekick/parser"
+	"github.com/iancoleman/strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
@@ -310,7 +311,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 	param := Param{
 		// The command-line flag name is the kebab-case version of the field name.
 		// Example: `requestId` -> `request-id`
-		ArgName: ToKebabCase(field.Name),
+		ArgName: strcase.ToKebab(field.Name),
 		// The `api_field` is the dot-separated path to the field in the request message.
 		APIField: apiField,
 		// We determine if the field is required based on the `(google.api.field_behavior)` annotation.
@@ -343,7 +344,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 				continue
 			}
 			param.Choices = append(param.Choices, Choice{
-				ArgValue:  ToKebabCase(v.Name),
+				ArgValue:  strcase.ToKebab(v.Name),
 				EnumValue: v.Name,
 			})
 		}
@@ -359,7 +360,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 		param.HelpText = rule.HelpText.Brief
 	} else {
 		// TODO(https://github.com/googleapis/librarian/issues/3033): improve default help text inference
-		param.HelpText = fmt.Sprintf("Value for the `%s` field.", ToKebabCase(field.Name))
+		param.HelpText = fmt.Sprintf("Value for the `%s` field.", strcase.ToKebab(field.Name))
 	}
 	return param
 }
@@ -383,7 +384,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 
 	// We determine the singular name of the resource.
 	// For `Create` methods, this comes from the `_id` field. For others, it's the `name` field.
-	resourceName := toSnakeCase(strings.TrimSuffix(field.Name, "_id"))
+	resourceName := strcase.ToSnake(strings.TrimSuffix(field.Name, "_id"))
 	if field.Name == "name" {
 		resourceName = getSingularFromPattern(pattern)
 	}
@@ -504,7 +505,7 @@ func isPrimaryResource(field *api.Field, method *api.Method) bool {
 	// in the format "{resource}_id" (e.g., "instance_id").
 	if strings.HasPrefix(method.Name, "Create") {
 		resourceName := getResourceName(method)
-		if resourceName != "" && field.Name == toSnakeCase(resourceName)+"_id" {
+		if resourceName != "" && field.Name == strcase.ToSnake(resourceName)+"_id" {
 			return true
 		}
 	}
@@ -652,7 +653,7 @@ func getVerb(methodName string) string {
 		return "delete"
 	default:
 		// For non-standard methods, we just use the snake_case version of the method name.
-		return toSnakeCase(methodName)
+		return strcase.ToSnake(methodName)
 	}
 }
 
