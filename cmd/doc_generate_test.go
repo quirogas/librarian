@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,11 +27,11 @@ func TestGoGenerateLibrarianDoc(t *testing.T) {
 	}{
 		{
 			name:    "automation_doc",
-			docFile: "cmd/automation/doc.go",
+			docFile: "cmd/legacyautomation/doc.go",
 		},
 		{
 			name:    "librarian_doc",
-			docFile: "cmd/librarian/doc.go",
+			docFile: "cmd/legacylibrarian/doc.go",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

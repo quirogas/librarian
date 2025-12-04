@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,9 +16,11 @@ package librarian
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/googleapis/librarian/internal/config"
-	"github.com/googleapis/librarian/internal/language"
+	"github.com/googleapis/librarian/internal/librarian/internal/rust"
+	"github.com/googleapis/librarian/internal/yaml"
 	"github.com/urfave/cli/v3"
 )
 
@@ -60,17 +62,39 @@ func runRelease(ctx context.Context, cmd *cli.Command) error {
 		return errBothLibraryAndAllFlag
 	}
 
-	cfg, err := config.Read(librarianConfigPath)
+	cfg, err := yaml.Read[config.Config](librarianConfigPath)
 	if err != nil {
 		return err
 	}
 	if all {
-		cfg, err = language.ReleaseAll(cfg)
+		cfg, err = releaseAll(cfg)
 	} else {
-		cfg, err = language.ReleaseLibrary(cfg, libraryName)
+		cfg, err = releaseLibrary(cfg, libraryName)
 	}
 	if err != nil {
 		return err
 	}
-	return cfg.Write(librarianConfigPath)
+	return yaml.Write(librarianConfigPath, cfg)
+}
+
+func releaseAll(cfg *config.Config) (*config.Config, error) {
+	switch cfg.Language {
+	case "testhelper":
+		return testReleaseAll(cfg)
+	case "rust":
+		return rust.ReleaseAll(cfg)
+	default:
+		return nil, fmt.Errorf("language not supported for release --all: %q", cfg.Language)
+	}
+}
+
+func releaseLibrary(cfg *config.Config, name string) (*config.Config, error) {
+	switch cfg.Language {
+	case "testhelper":
+		return testReleaseLibrary(cfg, name)
+	case "rust":
+		return rust.ReleaseLibrary(cfg, name)
+	default:
+		return nil, fmt.Errorf("language not supported for release --all: %q", cfg.Language)
+	}
 }

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,16 +15,6 @@
 // Package config provides types and functions for reading and writing
 // librarian.yaml configuration files.
 package config
-
-import (
-	"errors"
-	"fmt"
-	"os"
-
-	"gopkg.in/yaml.v3"
-)
-
-var errLibraryNotFound = errors.New("library not found")
 
 // Config represents a librarian.yaml configuration file.
 type Config struct {
@@ -64,7 +54,7 @@ type Source struct {
 
 	// Dir is a local directory path to use instead of fetching.
 	// If set, Commit and SHA256 are ignored.
-	Dir string `yaml:"-"`
+	Dir string `yaml:"dir,omitempty"`
 }
 
 // Default contains default settings for all libraries.
@@ -88,7 +78,8 @@ type Default struct {
 
 // Library represents a library configuration.
 type Library struct {
-	// Name is the library name, such as "secretmanager" or "storage".
+	// Name is the library name, such as "secretmanager" or "storage". It is
+	// listed first so it appears at the top of each library entry in YAML.
 	Name string `yaml:"name"`
 
 	// Channel specifies which googleapis Channel to generate from (for generated
@@ -129,11 +120,14 @@ type Library struct {
 	// overrides Default.Transport.
 	Transport string `yaml:"transport,omitempty"`
 
+	// DescriptionOverride overrides the library description.
+	DescriptionOverride string `yaml:"description_override,omitempty"`
+
 	// Rust contains Rust-specific library configuration.
 	Rust *RustCrate `yaml:"rust,omitempty"`
 }
 
-// Channel describes an Channel to include in a library.
+// Channel describes a Channel to include in a library.
 type Channel struct {
 	// Path specifies which googleapis Path to generate from (for generated
 	// libraries).
@@ -141,51 +135,4 @@ type Channel struct {
 
 	// ServiceConfig is the path to the service config file.
 	ServiceConfig string `yaml:"service_config,omitempty"`
-}
-
-// Read reads the configuration from a librarian.yaml file.
-func Read(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-	var c Config
-	if err := yaml.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-	return &c, nil
-}
-
-// Write writes config to the file at path.
-func (c *Config) Write(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open config file: %w", err)
-	}
-	defer f.Close()
-
-	enc := yaml.NewEncoder(f)
-	enc.SetIndent(2)
-	if err := enc.Encode(c); err != nil {
-		return fmt.Errorf("failed to encode config: %w", err)
-	}
-	if err := enc.Close(); err != nil {
-		return fmt.Errorf("failed to close encoder: %w", err)
-	}
-	return nil
-}
-
-// LibraryByName returns a library with the given name.
-func (c *Config) LibraryByName(name string) (*Library, error) {
-	if c.Libraries == nil {
-		return nil, errLibraryNotFound
-	}
-
-	for _, library := range c.Libraries {
-		if library.Name == name {
-			return library, nil
-		}
-	}
-
-	return nil, errLibraryNotFound
 }
