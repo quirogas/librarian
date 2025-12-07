@@ -31,9 +31,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ==========================================
+// Main Entrypoint
+// ==========================================
+
 // Generate generates gcloud commands for a service.
 func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList string) error {
-	cfg, err := readGcloudConfig(gcloudconfig)
+	// TODO(santiquiroga): determine if overrides is the best name
+	overrides, err := readGcloudConfig(gcloudconfig)
 	if err != nil {
 		return err
 	}
@@ -43,61 +48,20 @@ func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList
 		return err
 	}
 
-	// We need the short service name (e.g., "parallelstore") to use as the root
-	// directory for the generated command surface. We derive this from the `default_host`
-	// annotation of the first service in the API model. Example: "parallelstore.googleapis.com" -> "parallelstore"
-	shortServiceName := ""
-	if len(model.Services) > 0 {
-		// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
-		hostParts := strings.Split(model.Services[0].DefaultHost, ".")
-		if len(hostParts) > 0 {
-			shortServiceName = hostParts[0]
-		}
-	}
-	// Fallback to gcloud config if default_host is not available or model.Services is empty.
-	if shortServiceName == "" && len(cfg.APIs) > 0 {
-		// TODO(issues/optional_apis_in_gcloud_config.md): Investigate if an empty `apis` block is permissible.
-		shortServiceName = strings.ToLower(cfg.APIs[0].Name)
+	if len(model.Services) == 0 {
+		return fmt.Errorf("no services found in the provided protos")
 	}
 
-	// The final output will be placed in a directory structure like:
-	// `{outdir}/{shortServiceName}/`
-	surfaceDir := filepath.Join(output, shortServiceName)
-
-	// gcloud commands are resource-centric commands (e.g., `gcloud parallelstore instances create`),
-	// so we first need to group all the API methods by the resource they operate on.
-	// We'll create a map where the key is the resource's collection ID (e.g., "instances")
-	// and the value is a list of methods that act on that resource.
-	methodsByResource := make(map[string][]*api.Method)
-
-	// We iterate through all services and their methods defined in the API model.
-	// TODO(https://github.com/googleapis/librarian/issues/3034): we might want to move the mapping function to protobuf.go
 	for _, service := range model.Services {
-		for _, method := range service.Methods {
-			// For each method, we determine the plural name of the resource it operates on.
-			// This plural name (e.g., "instances") will serve as our collection ID.
-			// Example: For the `CreateInstance` method, this will return "instances".
-			collectionID := getPluralName(method, model)
-
-			// If a collection ID is found, we add the method to our map.
-			if collectionID != "" {
-				methodsByResource[collectionID] = append(methodsByResource[collectionID], method)
-			}
-		}
-	}
-	// Now that we have grouped the methods by resource, we can generate the
-	// command files for each resource.
-	for collectionID, methods := range methodsByResource {
-		// The `generateResourceCommands` function will handle the creation of the
-		// directory structure and YAML files for this specific resource.
-		err := generateResourceCommands(collectionID, methods, surfaceDir, cfg, model)
-		if err != nil {
-			return err
+		// TODO(issues/support_multiple_services.md): Ensure output directories don't collide if multiple services share a name.
+		if err := generateService(ctx, service, overrides, model, output); err != nil {
+			return fmt.Errorf("failed to generate commands for service %q: %w", service.Name, err)
 		}
 	}
 	return nil
 }
 
+// TODO(santiquiroga): move this to utils maybe?
 func createAPIModel(googleapisPath, includeList string) (*api.API, error) {
 	parserConfig := &config.Config{
 		General: config.GeneralConfig{
@@ -138,12 +102,68 @@ func readGcloudConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// ==========================================
+// Service Processing
+// ==========================================
+
+func generateService(ctx context.Context, service *api.Service, overrides *Config, model *api.API, output string) error {
+	// Determine short service name for directory structure.
+	// TODO(santiquiroga): add documentation/ logic on why we can use default host instead of service config name
+	shortServiceName := ""
+	hostParts := strings.Split(service.DefaultHost, ".")
+	if len(hostParts) > 0 {
+		shortServiceName = hostParts[0]
+	}
+
+	// Fallback to gcloud config if default_host is not available.
+	// TODO(santiquiroga): I belive gcloud config name is wrong/bad fall back, so we might want to error out instead
+	if shortServiceName == "" && len(overrides.APIs) > 0 {
+		// TODO(issues/optional_apis_in_gcloud_config.md): Investigate if an empty `apis` block is permissible.
+		shortServiceName = strings.ToLower(overrides.APIs[0].Name)
+	}
+
+	// The final output will be placed in a directory structure like:
+	// `{outdir}/{shortServiceName}/`
+	surfaceDir := filepath.Join(output, shortServiceName)
+
+	// gcloud commands are resource-centric commands (e.g., `gcloud parallelstore instances create`),
+	// so we first need to group all the API methods by the resource they operate on.
+	// We'll create a map where the key is the resource's collection ID (e.g., "instances")
+	// and the value is a list of methods that act on that resource.
+	methodsByResource := make(map[string][]*api.Method)
+
+	for _, method := range service.Methods {
+		// For each method, we determine the plural name of the resource it operates on.
+		// This plural name (e.g., "instances") will serve as our collection ID.
+		// Example: For the `CreateInstance` method, this will return "instances".
+		// TODO(santiquiroga): we might be able to leverage .ID instead
+		collectionID := getPluralName(method, model)
+
+		// If a collection ID is found, we add the method to our map.
+		if collectionID != "" {
+			methodsByResource[collectionID] = append(methodsByResource[collectionID], method)
+		}
+	}
+
+	// Now that we have grouped the methods by resource, we can generate the
+	// command files for each resource.
+	for collectionID, methods := range methodsByResource {
+		// The `generateResourceCommands` function will handle the creation of the
+		// directory structure and YAML files for this specific resource.
+		err := generateResourceCommands(collectionID, methods, surfaceDir, overrides, model)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // generateResourceCommands creates the directory structure and YAML files for a
 // single resource's commands (e.g., create, delete, list).
 //
 // For a given collectionID like "instances", this function will create a directory
 // `instances/` and populate it with `create.yaml`, `delete.yaml`, etc.
-func generateResourceCommands(collectionID string, methods []*api.Method, baseDir string, cfg *Config, model *api.API) error {
+func generateResourceCommands(collectionID string, methods []*api.Method, baseDir string, overrides *Config, model *api.API) error {
 	// The main directory for the resource is named after its collection ID.
 	// Example: `{baseDir}/instances`
 	resourceDir := filepath.Join(baseDir, collectionID)
@@ -163,7 +183,7 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 
 		// We construct the complete command definition from the API method.
 		// This involves generating all the arguments, help text, and request details.
-		cmd := newCommand(method, cfg, model)
+		cmd := newCommand(method, overrides, model)
 
 		// in gcloud convention, the final YAML file must contain a list of commands,
 		// even if there is only one.
@@ -198,20 +218,25 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 	return nil
 }
 
+// ==========================================
+// Command Generation
+// ==========================================
+
 // newCommand constructs a single gcloud command definition from an API method.
 // This function assembles all the necessary pieces: help text, arguments,
 // request details, and async configuration.
-func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
+func newCommand(method *api.Method, overrides *Config, model *api.API) *Command {
 	// We look up the help text and API definition for this specific method in the
 	// `gcloud.yaml` configuration file.
-	rule := findHelpTextRule(method, cfg)
+	rule := findHelpTextRule(method, overrides)
 	//TODO(https://github.com/googleapis/librarian/issues/3035): parse exaples from `gcloud.yaml`
 
 	// We initialize the command with some default values.
 	cmd := &Command{
 		AutoGenerated: true,
-			// TODO(issues/derive_hidden_flag.md): Derive Hidden from gcloud.yaml instead of hardcoding.
-			Hidden: true,	}
+		// TODO(issues/derive_hidden_flag.md): Derive Hidden from gcloud.yaml instead of hardcoding.
+		Hidden: true,
+	}
 
 	// If a help text rule was found in the config, we apply it to the command.
 	if rule != nil {
@@ -229,10 +254,10 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 
 	// The core of the command generation happens here: we generate the arguments,
 	// request details, and async configuration.
-	cmd.Arguments = newArguments(method, cfg, model)
-	cmd.Request = newRequest(method, cfg, model)
+	cmd.Arguments = newArguments(method, overrides, model)
+	cmd.Request = newRequest(method, overrides, model)
 	if method.OperationInfo != nil {
-		cmd.Async = newAsync(method, cfg)
+		cmd.Async = newAsync(method, overrides)
 	}
 
 	return cmd
@@ -240,7 +265,7 @@ func newCommand(method *api.Method, cfg *Config, model *api.API) *Command {
 
 // newArguments generates the set of arguments for a command by parsing the
 // fields of the method's request message.
-func newArguments(method *api.Method, cfg *Config, model *api.API) Arguments {
+func newArguments(method *api.Method, overrides *Config, model *api.API) Arguments {
 	args := Arguments{}
 	if method.InputType == nil {
 		return args
@@ -258,7 +283,7 @@ func newArguments(method *api.Method, cfg *Config, model *api.API) Arguments {
 		// For example, in a `CreateInstance` method, this would be the `instance_id` field.
 		if isPrimaryResource(field, method) {
 			// If it is the primary resource, we generate a special positional argument for it.
-			param := newPrimaryResourceParam(field, method, model, cfg)
+			param := newPrimaryResourceParam(field, method, model, overrides)
 			args.Params = append(args.Params, param)
 			continue
 		}
@@ -266,7 +291,7 @@ func newArguments(method *api.Method, cfg *Config, model *api.API) Arguments {
 		// For all other fields, we generate a standard flag argument. If the field
 		// is a nested message, its fields will be "flattened" into top-level flags.
 		// For example, a field `instance.description` becomes the `--description` flag.
-		addFlattenedParams(field, field.JSONName, &args, cfg, model)
+		addFlattenedParams(field, field.JSONName, &args, overrides, model)
 	}
 	return args
 }
@@ -274,7 +299,7 @@ func newArguments(method *api.Method, cfg *Config, model *api.API) Arguments {
 // addFlattenedParams recursively processes a field and its sub-fields to generate
 // a flat list of command-line flags. This is necessary for nested messages in
 // the request proto.
-func addFlattenedParams(field *api.Field, prefix string, args *Arguments, cfg *Config, model *api.API) {
+func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overrides *Config, model *api.API) {
 	// We skip fields that are marked as `OUTPUT_ONLY` in the proto, as these are
 	// not meant to be provided by the user. We also skip the "name" field, as it's
 	// handled by the primary resource argument.
@@ -294,18 +319,18 @@ func addFlattenedParams(field *api.Field, prefix string, args *Arguments, cfg *C
 			// Continuing the example: when processing the `capacity_gib` field inside the
 			// `Instance` message, the prefix will become "instance.capacityGib". This
 			// results in a `--capacity-gib` flag that maps to the correct nested field.
-			addFlattenedParams(f, fmt.Sprintf("%s.%s", prefix, f.JSONName), args, cfg, model)
+			addFlattenedParams(f, fmt.Sprintf("%s.%s", prefix, f.JSONName), args, overrides, model)
 		}
 		return
 	}
 
 	// If the field is a scalar, map, or enum, we generate a parameter for it.
-	param := newParam(field, prefix, cfg, model)
+	param := newParam(field, prefix, overrides, model)
 	args.Params = append(args.Params, param)
 }
 
 // newParam creates a single command-line argument (a `Param` struct) from a proto field.
-func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Param {
+func newParam(field *api.Field, apiField string, overrides *Config, model *api.API) Param {
 	// We initialize the Param with the basic information derived from the field.
 	param := Param{
 		// The command-line flag name is the kebab-case version of the field name.
@@ -324,7 +349,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 		// If the field is a resource reference (e.g., a field for a network), we
 		// generate a `ResourceSpec` for it. This tells gcloud how to parse the
 		// resource name provided by the user.
-		param.ResourceSpec = newResourceReferenceSpec(field, model, cfg)
+		param.ResourceSpec = newResourceReferenceSpec(field, model, overrides)
 		param.ResourceMethodParams = map[string]string{
 			apiField: "{__relative_name__}",
 		}
@@ -355,7 +380,7 @@ func newParam(field *api.Field, apiField string, cfg *Config, model *api.API) Pa
 
 	// We try to find help text for this field in the `gcloud.yaml` config.
 	// If none is found, we generate a default help text.
-	if rule := findFieldHelpTextRule(field, cfg); rule != nil {
+	if rule := findFieldHelpTextRule(field, overrides); rule != nil {
 		param.HelpText = rule.HelpText.Brief
 	} else {
 		// TODO(https://github.com/googleapis/librarian/issues/3033): improve default help text inference
@@ -370,6 +395,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
 	pattern := ""
+	// TODO(santiquiroga): we might want to check the model to see if there is a better way to get the resource for a method
 	if resource != nil && len(resource.Pattern) > 0 {
 		pattern = resource.Pattern[0]
 	}
@@ -413,7 +439,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 
 // newResourceReferenceSpec creates a ResourceSpec for a field that references
 // another resource type (e.g., a `--network` flag).
-func newResourceReferenceSpec(field *api.Field, model *api.API, cfg *Config) *ResourceSpec {
+func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Config) *ResourceSpec {
 	// We iterate through all the resource definitions in the API model to find the
 	// one that matches the type of our resource reference.
 	for _, def := range model.ResourceDefinitions {
@@ -495,7 +521,29 @@ func newAttributesFromPattern(pattern string) []Attribute {
 	return attributes
 }
 
+// newRequest creates the `Request` part of the command definition.
+func newRequest(method *api.Method, overrides *Config, model *api.API) *Request {
+	// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
+	return &Request{
+		APIVersion: apiVersion(overrides),
+		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))},
+	}
+}
+
+// newAsync creates the `Async` part of the command definition for long-running operations.
+func newAsync(method *api.Method, overrides *Config) *Async {
+	return &Async{
+		// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
+		Collection: []string{"parallelstore.projects.locations.operations"},
+	}
+}
+
+// ==========================================
+// Resource Helpers
+// ==========================================
+
 // isPrimaryResource determines if a field represents the primary resource of a method.
+// TODO(santiquiroga): revice the logic for getting the primary resource of a method
 func isPrimaryResource(field *api.Field, method *api.Method) bool {
 	if method.InputType == nil {
 		return false
@@ -574,47 +622,6 @@ func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
 	return nil
 }
 
-// newRequest creates the `Request` part of the command definition.
-func newRequest(method *api.Method, cfg *Config, model *api.API) *Request {
-	// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
-	return &Request{
-		APIVersion: apiVersion(cfg),
-		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))},
-	}
-}
-
-// newAsync creates the `Async` part of the command definition for long-running operations.
-func newAsync(method *api.Method, cfg *Config) *Async {
-	return &Async{
-		// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
-		Collection: []string{"parallelstore.projects.locations.operations"},
-	}
-}
-
-// apiVersion extracts the API version from the configuration.
-func apiVersion(cfg *Config) string {
-	if len(cfg.APIs) > 0 {
-		return cfg.APIs[0].APIVersion
-	}
-	return ""
-}
-
-// getGcloudType maps a proto data type to its corresponding gcloud type.
-func getGcloudType(t api.Typez) string {
-	switch t {
-	case api.STRING_TYPE:
-		return "" // Default is string
-	case api.INT32_TYPE, api.INT64_TYPE, api.UINT32_TYPE, api.UINT64_TYPE:
-		return "long"
-	case api.BOOL_TYPE:
-		return "boolean"
-	case api.FLOAT_TYPE, api.DOUBLE_TYPE:
-		return "float"
-	default:
-		return ""
-	}
-}
-
 // getPluralName determines the plural name of a resource. It follows a clear
 // hierarchy of truth: first, the explicit `plural` field in the resource
 // definition, and second, inference from the resource pattern.
@@ -636,6 +643,26 @@ func getPluralName(method *api.Method, model *api.API) string {
 	return ""
 }
 
+// ==========================================
+// Naming & Formatting Utils
+// ==========================================
+
+// getGcloudType maps a proto data type to its corresponding gcloud type.
+func getGcloudType(t api.Typez) string {
+	switch t {
+	case api.STRING_TYPE:
+		return "" // Default is string
+	case api.INT32_TYPE, api.INT64_TYPE, api.UINT32_TYPE, api.UINT64_TYPE:
+		return "long"
+	case api.BOOL_TYPE:
+		return "boolean"
+	case api.FLOAT_TYPE, api.DOUBLE_TYPE:
+		return "float"
+	default:
+		return ""
+	}
+}
+
 // getVerb maps an API method name to a standard gcloud command verb.
 func getVerb(methodName string) string {
 	switch {
@@ -653,42 +680,6 @@ func getVerb(methodName string) string {
 		// For non-standard methods, we just use the snake_case version of the method name.
 		return strcase.ToSnake(methodName)
 	}
-}
-
-// findHelpTextRule finds the help text rule from the config that applies to the current method.
-func findHelpTextRule(method *api.Method, cfg *Config) *HelpTextRule {
-	if cfg.APIs == nil {
-		return nil
-	}
-	for _, api := range cfg.APIs {
-		if api.HelpText == nil {
-			continue
-		}
-		for _, rule := range api.HelpText.MethodRules {
-			if rule.Selector == strings.TrimPrefix(method.ID, ".") {
-				return rule
-			}
-		}
-	}
-	return nil
-}
-
-// findFieldHelpTextRule finds the help text rule from the config that applies to the current field.
-func findFieldHelpTextRule(field *api.Field, cfg *Config) *HelpTextRule {
-	if cfg.APIs == nil {
-		return nil
-	}
-	for _, api := range cfg.APIs {
-		if api.HelpText == nil {
-			continue
-		}
-		for _, rule := range api.HelpText.FieldRules {
-			if rule.Selector == field.ID {
-				return rule
-			}
-		}
-	}
-	return nil
 }
 
 // isOutputOnly checks if a field is marked as output-only in the proto.
@@ -763,6 +754,55 @@ func inferTrackFromPackage(pkg string) string {
 	}
 	if strings.Contains(version, "beta") {
 		return "beta"
+
 	}
 	return "ga"
+}
+
+// ==========================================
+// Config Overrides
+// ==========================================
+
+// findHelpTextRule finds the help text rule from the config that applies to the current method.
+func findHelpTextRule(method *api.Method, overrides *Config) *HelpTextRule {
+	if overrides.APIs == nil {
+		return nil
+	}
+	for _, api := range overrides.APIs {
+		if api.HelpText == nil {
+			continue
+		}
+		for _, rule := range api.HelpText.MethodRules {
+			if rule.Selector == strings.TrimPrefix(method.ID, ".") {
+				return rule
+			}
+		}
+	}
+	return nil
+}
+
+// findFieldHelpTextRule finds the help text rule from the config that applies to the current field.
+func findFieldHelpTextRule(field *api.Field, overrides *Config) *HelpTextRule {
+	if overrides.APIs == nil {
+		return nil
+	}
+	for _, api := range overrides.APIs {
+		if api.HelpText == nil {
+			continue
+		}
+		for _, rule := range api.HelpText.FieldRules {
+			if rule.Selector == field.ID {
+				return rule
+			}
+		}
+	}
+	return nil
+}
+
+// apiVersion extracts the API version from the configuration.
+func apiVersion(overrides *Config) string {
+	if len(overrides.APIs) > 0 {
+		return overrides.APIs[0].APIVersion
+	}
+	return ""
 }
