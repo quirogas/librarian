@@ -35,7 +35,6 @@ import (
 
 // Generate generates gcloud commands for a service.
 func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList string) error {
-	// TODO(santiquiroga): determine if overrides is the best name
 	overrides, err := readGcloudConfig(gcloudconfig)
 	if err != nil {
 		return err
@@ -59,7 +58,6 @@ func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList
 	return nil
 }
 
-// TODO(santiquiroga): move this to utils maybe?
 func createAPIModel(googleapisPath, includeList string) (*api.API, error) {
 	parserConfig := &config.Config{
 		General: config.GeneralConfig{
@@ -113,11 +111,8 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 		shortServiceName = hostParts[0]
 	}
 
-	// Fallback to gcloud config if default_host is not available.
-	// TODO(santiquiroga): I belive gcloud config name is wrong/bad fall back, so we might want to error out instead
-	if shortServiceName == "" && len(overrides.APIs) > 0 {
-		// TODO(issues/optional_apis_in_gcloud_config.md): Investigate if an empty `apis` block is permissible.
-		shortServiceName = strings.ToLower(overrides.APIs[0].Name)
+	if shortServiceName == "" {
+		return fmt.Errorf("failed to determine short service name for service %q: default_host is empty", service.Name)
 	}
 
 	// The final output will be placed in a directory structure like:
@@ -135,7 +130,7 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 		// This plural name (e.g., "instances") will serve as our collection ID.
 		// Example: For the `CreateInstance` method, this will return "instances".
 		// TODO(santiquiroga): we might be able to leverage .ID instead
-		collectionID := getPluralName(method, model)
+		collectionID := getPluralResourceNameForMethod(method, model)
 
 		// If a collection ID is found, we add the method to our map.
 		if collectionID != "" {
@@ -227,7 +222,6 @@ func newCommand(method *api.Method, overrides *Config, model *api.API) *Command 
 	// We look up the help text and API definition for this specific method in the
 	// `gcloud.yaml` configuration file.
 	rule := findHelpTextRule(method, overrides)
-	//TODO(https://github.com/googleapis/librarian/issues/3035): parse exaples from `gcloud.yaml`
 
 	// We initialize the command with some default values.
 	cmd := &Command{
@@ -393,7 +387,6 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
 	var segments []api.PathSegment
-	// TODO(santiquiroga): we might want to check the model to see if there is a better way to get the resource for a method
 	if resource != nil && len(resource.Pattern) > 0 {
 		segments = resource.Pattern[0]
 	}
@@ -427,7 +420,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 		RequestIDField:    strcase.ToLowerCamel(field.Name),
 		ResourceSpec: &ResourceSpec{
 			Name:                  resourceName,
-			PluralName:            getPluralName(method, model),
+			PluralName:            getPluralResourceNameForMethod(method, model),
 			Collection:            fmt.Sprintf("%s.%s", shortServiceName, collectionPath),
 			DisableAutoCompleters: false,
 			Attributes:            newAttributesFromSegments(segments),
@@ -524,7 +517,7 @@ func newRequest(method *api.Method, overrides *Config, model *api.API) *Request 
 	// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
 	return &Request{
 		APIVersion: apiVersion(overrides),
-		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralName(method, model))},
+		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralResourceNameForMethod(method, model))},
 	}
 }
 
@@ -575,56 +568,60 @@ func getResourceName(method *api.Method) string {
 
 // getResourceForMethod finds the `api.Resource` definition associated with a method.
 // This is a crucial function for linking a method to the resource it operates on.
-// TODO(https://github.com/googleapis/librarian/issues/3034): reconsider this function. We might want to move all the resource processing somewhere else
 func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
-	// Strategy 1: For `Create` and `Update` methods, the request message usually
-	// contains a field that is the resource message itself. We look for that first.
-	if method.InputType != nil {
-		for _, f := range method.InputType.Fields {
-			if msg := f.MessageType; msg != nil && msg.Resource != nil {
-				return msg.Resource
-			}
+	if method.InputType == nil {
+		return nil
+	}
+
+	// Strategy 1: For `Create` and `Update`, the request message usually contains
+	// a field that *is* the resource message. This message is annotated with `(google.api.resource)`.
+	for _, f := range method.InputType.Fields {
+		if msg := f.MessageType; msg != nil && msg.Resource != nil {
+			return msg.Resource
 		}
 	}
 
-	// Strategy 2: For `Get`, `Delete`, and `List` methods, the request message
-	// usually contains a "name" or "parent" field with a `resource_reference`.
+	// Strategy 2: For `Get`, `Delete`, and `List`, the request message has a `name`
+	// or `parent` field with a `(google.api.resource_reference)`.
 	var resourceType string
-	if method.InputType != nil {
-		for _, field := range method.InputType.Fields {
-			if (field.Name == "name" || field.Name == "parent") && field.ResourceReference != nil {
+	for _, field := range method.InputType.Fields {
+		if (field.Name == "name" || field.Name == "parent") && field.ResourceReference != nil {
+			// For collection methods (like List), the reference is to the parent,
+			// and the resource we care about is the `child_type`.
+			if field.ResourceReference.ChildType != "" {
+				resourceType = field.ResourceReference.ChildType
+			} else {
 				resourceType = field.ResourceReference.Type
-				if resourceType == "" {
-					resourceType = field.ResourceReference.ChildType
-				}
-				break
 			}
+			break
 		}
 	}
 
-	// If we found a resource type, we now need to look up its full definition
-	// in the API model.
-	if resourceType != "" {
-		for _, msg := range model.Messages {
-			if msg.Resource != nil && msg.Resource.Type == resourceType {
-				return msg.Resource
-			}
+	if resourceType == "" {
+		return nil
+	}
+
+	// Use the API model's indexed maps for an efficient lookup.
+	for _, r := range model.ResourceDefinitions {
+		if r.Type == resourceType {
+			return r
 		}
-		for _, def := range model.ResourceDefinitions {
-			if def.Type == resourceType {
-				return def
-			}
+	}
+
+	// Also check resources defined on messages directly.
+	for _, m := range model.Messages {
+		if m.Resource != nil && m.Resource.Type == resourceType {
+			return m.Resource
 		}
 	}
 
 	return nil
 }
 
-// getPluralName determines the plural name of a resource. It follows a clear
+// getPluralResourceNameForMethod determines the plural name of a resource. It follows a clear
 // hierarchy of truth: first, the explicit `plural` field in the resource
 // definition, and second, inference from the resource pattern.
-// TODO(https://github.com/googleapis/librarian/issues/3036): we should get the resource the function operates on
-func getPluralName(method *api.Method, model *api.API) string {
+func getPluralResourceNameForMethod(method *api.Method, model *api.API) string {
 	resource := getResourceForMethod(method, model)
 	if resource != nil {
 		// The `plural` field in the `(google.api.resource)` annotation is the
