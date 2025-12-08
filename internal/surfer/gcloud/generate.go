@@ -26,8 +26,6 @@ import (
 	"github.com/googleapis/librarian/internal/sidekick/config"
 	"github.com/googleapis/librarian/internal/sidekick/parser"
 	"github.com/iancoleman/strcase"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 )
 
@@ -426,7 +424,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 		IsPositional:      true,
 		IsPrimaryResource: true,
 		Required:          true,
-		RequestIDField:    toLowerCamelCase(field.Name),
+		RequestIDField:    strcase.ToLowerCamel(field.Name),
 		ResourceSpec: &ResourceSpec{
 			Name:                  resourceName,
 			PluralName:            getPluralName(method, model),
@@ -686,16 +684,6 @@ func getVerb(methodName string) string {
 // isOutputOnly checks if a field is marked as output-only in the proto.
 func isOutputOnly(field *api.Field) bool {
 	return slices.Contains(field.Behavior, api.FIELD_BEHAVIOR_OUTPUT_ONLY)
-}
-
-// toLowerCamelCase converts a snake_case string to lowerCamelCase.
-func toLowerCamelCase(s string) string {
-	parts := strings.Split(s, "_")
-	for i := 1; i < len(parts); i++ {
-		caser := cases.Title(language.AmericanEnglish)
-		parts[i] = caser.String(parts[i])
-	}
-	return strings.Join(parts, "")
 }
 
 // getPluralFromPattern infers the plural name of a resource from its pattern string.
