@@ -52,7 +52,7 @@ func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList
 
 	for _, service := range model.Services {
 		// TODO(issues/support_multiple_services.md): Ensure output directories don't collide if multiple services share a name.
-		if err := generateService(ctx, service, overrides, model, output); err != nil {
+		if err := generateService(service, overrides, model, output); err != nil {
 			return fmt.Errorf("failed to generate commands for service %q: %w", service.Name, err)
 		}
 	}
@@ -104,7 +104,7 @@ func readGcloudConfig(path string) (*Config, error) {
 // Service Processing
 // ==========================================
 
-func generateService(ctx context.Context, service *api.Service, overrides *Config, model *api.API, output string) error {
+func generateService(service *api.Service, overrides *Config, model *api.API, output string) error {
 	// Determine short service name for directory structure.
 	// TODO(santiquiroga): add documentation/ logic on why we can use default host instead of service config name
 	shortServiceName := ""
