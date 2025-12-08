@@ -392,15 +392,15 @@ func newParam(field *api.Field, apiField string, overrides *Config, model *api.A
 func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, _ *Config) Param {
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
-	pattern := ""
+	var segments []api.PathSegment
 	// TODO(santiquiroga): we might want to check the model to see if there is a better way to get the resource for a method
 	if resource != nil && len(resource.Pattern) > 0 {
-		pattern = resource.Pattern[0]
+		segments = resource.Pattern[0]
 	}
 
 	// We construct the gcloud collection path from the resource's pattern string.
 	// Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
-	collectionPath := getCollectionPathFromPattern(pattern)
+	collectionPath := getCollectionPathFromSegments(segments)
 	// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
 	hostParts := strings.Split(model.Services[0].DefaultHost, ".")
 	shortServiceName := hostParts[0]
@@ -409,7 +409,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// For `Create` methods, this comes from the `_id` field. For others, it's the `name` field.
 	resourceName := strcase.ToSnake(strings.TrimSuffix(field.Name, "_id"))
 	if field.Name == "name" {
-		resourceName = getSingularFromPattern(pattern)
+		resourceName = getSingularFromSegments(segments)
 	}
 
 	// We generate a helpful help text based on whether the command is a `Create` command or not.
@@ -430,7 +430,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 			PluralName:            getPluralName(method, model),
 			Collection:            fmt.Sprintf("%s.%s", shortServiceName, collectionPath),
 			DisableAutoCompleters: false,
-			Attributes:            newAttributesFromPattern(pattern),
+			Attributes:            newAttributesFromSegments(segments),
 		},
 	}
 }
@@ -445,24 +445,24 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Confi
 			if len(def.Pattern) == 0 {
 				return nil // We cannot proceed without a pattern.
 			}
-			pattern := def.Pattern[0]
+			segments := def.Pattern[0]
 
 			// We determine the plural name, using the explicit `plural` field if available,
 			// and falling back to parsing the pattern otherwise.
 			pluralName := def.Plural
 			if pluralName == "" {
-				pluralName = getPluralFromPattern(pattern)
+				pluralName = getPluralFromSegments(segments)
 			}
 
 			// We determine the singular name from the pattern.
-			name := getSingularFromPattern(pattern)
+			name := getSingularFromSegments(segments)
 
 			// We construct the full gcloud collection path for the referenced resource
 			//assuming the current service is the current command.
 			// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
 			hostParts := strings.Split(model.Services[0].DefaultHost, ".")
 			shortServiceName := hostParts[0]
-			baseCollectionPath := getCollectionPathFromPattern(pattern)
+			baseCollectionPath := getCollectionPathFromSegments(segments)
 			fullCollectionPath := fmt.Sprintf("%s.%s", shortServiceName, baseCollectionPath)
 
 			// We assemble and return the `ResourceSpec`.
@@ -471,7 +471,7 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Confi
 				PluralName:            pluralName,
 				Collection:            fullCollectionPath,
 				DisableAutoCompleters: true,
-				Attributes:            newAttributesFromPattern(pattern),
+				Attributes:            newAttributesFromSegments(segments),
 			}
 		}
 	}
@@ -635,7 +635,7 @@ func getPluralName(method *api.Method, model *api.API) string {
 		// If the `plural` field is not present, we fall back to inferring the
 		// plural name from the resource's pattern string, as per AIP-122.
 		if len(resource.Pattern) > 0 {
-			return getPluralFromPattern(resource.Pattern[0])
+			return getPluralFromSegments(resource.Pattern[0])
 		}
 	}
 	return ""
@@ -686,47 +686,48 @@ func isOutputOnly(field *api.Field) bool {
 	return slices.Contains(field.Behavior, api.FIELD_BEHAVIOR_OUTPUT_ONLY)
 }
 
-// getPluralFromPattern infers the plural name of a resource from its pattern string.
+// getPluralFromSegments infers the plural name of a resource from its structured path segments.
 // Per AIP-122, the plural is the literal segment before the final variable segment.
 // Example: `.../instances/{instance}` -> "instances"
-// TODO(https://github.com/googleapis/librarian/issues/3090): Pattern field in Resource struct
-func getPluralFromPattern(pattern string) string {
-	parts := strings.Split(pattern, "/")
-	if len(parts) >= 2 {
-		if strings.HasPrefix(parts[len(parts)-1], "{") {
-			return parts[len(parts)-2]
+func getPluralFromSegments(segments []api.PathSegment) string {
+	if len(segments) >= 2 {
+		lastSegment := segments[len(segments)-1]
+		if lastSegment.Variable != nil {
+			// The second to last segment should be the literal plural name
+			secondLastSegment := segments[len(segments)-2]
+			if secondLastSegment.Literal != nil {
+				return *secondLastSegment.Literal
+			}
 		}
 	}
 	return ""
 }
 
-// getSingularFromPattern infers the singular name of a resource from its pattern string.
+// getSingularFromSegments infers the singular name of a resource from its structured path segments.
 // The singular is the name of the final variable segment.
 // Example: `.../instances/{instance}` -> "instance"
-// TODO(https://github.com/googleapis/librarian/issues/3090): Pattern field in Resource struct
-func getSingularFromPattern(pattern string) string {
-	parts := strings.Split(pattern, "/")
-	if len(parts) > 0 {
-		last := parts[len(parts)-1]
-		if strings.HasPrefix(last, "{") && strings.HasSuffix(last, "}") {
-			return strings.Trim(last, "{}")
+func getSingularFromSegments(segments []api.PathSegment) string {
+	if len(segments) > 0 {
+		last := segments[len(segments)-1]
+		if last.Variable != nil && len(last.Variable.FieldPath) > 0 {
+			// Typically the variable name is the last component of the field path
+			// e.g. for `name` binding it might be implied? No, httprule parser populates FieldPath.
+			return last.Variable.FieldPath[len(last.Variable.FieldPath)-1]
 		}
 	}
 	return ""
 }
 
-// getCollectionPathFromPattern constructs the base gcloud collection path from a
-// resource pattern string, according to AIP-122 conventions.
+// getCollectionPathFromSegments constructs the base gcloud collection path from a
+// structured resource pattern, according to AIP-122 conventions.
 // It joins the literal collection identifiers with dots.
 // Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
-// TODO(santiquiroga): go over where this collection pattern is being used, and determine if we can use .ID instead
-func getCollectionPathFromPattern(pattern string) string {
-	parts := strings.Split(pattern, "/")
+func getCollectionPathFromSegments(segments []api.PathSegment) string {
 	var collectionParts []string
-	for i := 0; i < len(parts)-1; i++ {
+	for i := 0; i < len(segments)-1; i++ {
 		// A collection identifier is a literal segment followed by a variable segment.
-		if !strings.HasPrefix(parts[i], "{") && strings.HasPrefix(parts[i+1], "{") {
-			collectionParts = append(collectionParts, parts[i])
+		if segments[i].Literal != nil && segments[i+1].Variable != nil {
+			collectionParts = append(collectionParts, *segments[i].Literal)
 		}
 	}
 	return strings.Join(collectionParts, ".")
@@ -799,3 +800,44 @@ func apiVersion(overrides *Config) string {
 	return ""
 }
 
+// newAttributesFromSegments parses a structured resource pattern and extracts the attributes
+// that make up the resource's name.
+func newAttributesFromSegments(segments []api.PathSegment) []Attribute {
+	var attributes []Attribute
+
+	// We iterate over the segments of the pattern.
+	for i, part := range segments {
+		// A variable segment is enclosed in curly braces.
+		if part.Variable != nil {
+			// The `attribute_name` is the name of the variable (e.g., "project").
+			if len(part.Variable.FieldPath) == 0 {
+				continue
+			}
+			name := part.Variable.FieldPath[len(part.Variable.FieldPath)-1]
+			var parameterName string
+
+			// The `parameter_name` is derived from the preceding literal segment
+			// (e.g., "projects" -> "projectsId"). This is a gcloud convention.
+			if i > 0 && segments[i-1].Literal != nil {
+				parameterName = *segments[i-1].Literal + "Id"
+			} else {
+				// This is a fallback for the unlikely case that a pattern starts with a variable.
+				parameterName = name + "sId"
+			}
+
+			attr := Attribute{
+				AttributeName: name,
+				ParameterName: parameterName,
+				Help:          fmt.Sprintf("The %s id of the {resource} resource.", name),
+			}
+
+			// If the attribute is a project, we add the standard gcloud property fallback,
+			// so users don't have to specify `--project` if it's already configured.
+			if name == "project" {
+				attr.Property = "core/project"
+			}
+			attributes = append(attributes, attr)
+		}
+	}
+	return attributes
+}

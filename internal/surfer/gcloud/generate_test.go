@@ -18,7 +18,16 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/googleapis/librarian/internal/sidekick/api"
 )
+
+func lit(s string) api.PathSegment {
+	return api.PathSegment{Literal: &s}
+}
+
+func variable(name string) api.PathSegment {
+	return api.PathSegment{Variable: api.NewPathVariable(name).WithMatch()}
+}
 
 func TestInferTrackFromPackage(t *testing.T) {
 	for _, test := range []struct {
@@ -26,36 +35,12 @@ func TestInferTrackFromPackage(t *testing.T) {
 		pkg  string
 		want string
 	}{
-		{
-			name: "GA package",
-			pkg:  "google.cloud.parallelstore.v1",
-			want: "ga",
-		},
-		{
-			name: "Beta package",
-			pkg:  "google.cloud.parallelstore.v1beta",
-			want: "beta",
-		},
-		{
-			name: "Alpha package",
-			pkg:  "google.cloud.parallelstore.v1alpha",
-			want: "alpha",
-		},
-		{
-			name: "Empty package",
-			pkg:  "",
-			want: "ga",
-		},
-		{
-			name: "Package without version",
-			pkg:  "google.cloud.parallelstore",
-			want: "ga",
-		},
-		{
-			name: "Other version",
-			pkg:  "google.cloud.parallelstore.v2",
-			want: "ga",
-		},
+		{"GA package", "google.cloud.parallelstore.v1", "ga"},
+		{"Beta package", "google.cloud.parallelstore.v1beta", "beta"},
+		{"Alpha package", "google.cloud.parallelstore.v1alpha", "alpha"},
+		{"Empty package", "", "ga"},
+		{"Package without version", "google.cloud.parallelstore", "ga"},
+		{"Other version", "google.cloud.parallelstore.v2", "ga"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got := inferTrackFromPackage(test.pkg)
@@ -89,19 +74,35 @@ func TestGetVerb(t *testing.T) {
 	}
 }
 
-func TestGetPluralFromPattern(t *testing.T) {
+func TestGetPluralFromSegments(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		pattern string
-		want    string
+		name     string
+		segments []api.PathSegment
+		want     string
 	}{
-		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "instances"},
-		{"Short", "shelves/{shelf}", "shelves"},
-		{"No Variable End", "projects/{project}/locations", ""},
-		{"Empty", "", ""},
+		{
+			name: "Standard",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
+			want: "instances",
+		},
+		{
+			name:     "Short",
+			segments: []api.PathSegment{lit("shelves"), variable("shelf")},
+			want:     "shelves",
+		},
+		{
+			name:     "No Variable End",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations")},
+			want:     "",
+		},
+		{
+			name:     "Empty",
+			segments: nil,
+			want:     "",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got := getPluralFromPattern(test.pattern)
+			got := getPluralFromSegments(test.segments)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
@@ -109,19 +110,35 @@ func TestGetPluralFromPattern(t *testing.T) {
 	}
 }
 
-func TestGetSingularFromPattern(t *testing.T) {
+func TestGetSingularFromSegments(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		pattern string
-		want    string
+		name     string
+		segments []api.PathSegment
+		want     string
 	}{
-		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "instance"},
-		{"Short", "shelves/{shelf}", "shelf"},
-		{"No Variable End", "projects/{project}/locations", ""},
-		{"Empty", "", ""},
+		{
+			name: "Standard",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
+			want: "instance",
+		},
+		{
+			name:     "Short",
+			segments: []api.PathSegment{lit("shelves"), variable("shelf")},
+			want:     "shelf",
+		},
+		{
+			name:     "No Variable End",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations")},
+			want:     "",
+		},
+		{
+			name:     "Empty",
+			segments: nil,
+			want:     "",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got := getSingularFromPattern(test.pattern)
+			got := getSingularFromSegments(test.segments)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
@@ -129,23 +146,43 @@ func TestGetSingularFromPattern(t *testing.T) {
 	}
 }
 
-func TestGetCollectionPathFromPattern(t *testing.T) {
+func TestGetCollectionPathFromSegments(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		pattern string
-		want    string
+		name     string
+		segments []api.PathSegment
+		want     string
 	}{
-		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "projects.locations.instances"},
-		{"Short", "shelves/{shelf}", "shelves"},
-		{"Root", "projects/{project}", "projects"},
-		{"Mixed", "organizations/{organization}/locations/{location}/clusters/{cluster}", "organizations.locations.clusters"},
+		{
+			name: "Standard",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
+			want: "projects.locations.instances",
+		},
+		{
+			name:     "Short",
+			segments: []api.PathSegment{lit("shelves"), variable("shelf")},
+			want:     "shelves",
+		},
+		{
+			name:     "Root",
+			segments: []api.PathSegment{lit("projects"), variable("project")},
+			want:     "projects",
+		},
+		{
+			name: "Mixed",
+			segments: []api.PathSegment{lit("organizations"), variable("organization"), lit("locations"), variable("location"), lit("clusters"), variable("cluster")},
+			want: "organizations.locations.clusters",
+		},
+		{
+			name: "Global",
+			segments: []api.PathSegment{lit("projects"), variable("project"), lit("global"), lit("networks"), variable("network")},
+			want: "projects.networks",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got := getCollectionPathFromPattern(test.pattern)
+			got := getCollectionPathFromSegments(test.segments)
 			if diff := cmp.Diff(test.want, got); diff != "" {
-				t.Errorf(" mismatch (-want +got):\n%s", diff)
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
-
