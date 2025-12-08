@@ -678,6 +678,7 @@ func getVerb(methodName string) string {
 		return "delete"
 	default:
 		// For non-standard methods, we just use the snake_case version of the method name.
+		// TODO(santiquiroga): we might want to return an error when the method is empty
 		return strcase.ToSnake(methodName)
 	}
 }
@@ -700,6 +701,7 @@ func toLowerCamelCase(s string) string {
 // getPluralFromPattern infers the plural name of a resource from its pattern string.
 // Per AIP-122, the plural is the literal segment before the final variable segment.
 // Example: `.../instances/{instance}` -> "instances"
+// TODO(https://github.com/googleapis/librarian/issues/3090): Pattern field in Resource struct
 func getPluralFromPattern(pattern string) string {
 	parts := strings.Split(pattern, "/")
 	if len(parts) >= 2 {
@@ -713,6 +715,7 @@ func getPluralFromPattern(pattern string) string {
 // getSingularFromPattern infers the singular name of a resource from its pattern string.
 // The singular is the name of the final variable segment.
 // Example: `.../instances/{instance}` -> "instance"
+// TODO(https://github.com/googleapis/librarian/issues/3090): Pattern field in Resource struct
 func getSingularFromPattern(pattern string) string {
 	parts := strings.Split(pattern, "/")
 	if len(parts) > 0 {
@@ -728,6 +731,7 @@ func getSingularFromPattern(pattern string) string {
 // resource pattern string, according to AIP-122 conventions.
 // It joins the literal collection identifiers with dots.
 // Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
+// TODO(santiquiroga): go over where this collection pattern is being used, and determine if we can use .ID instead
 func getCollectionPathFromPattern(pattern string) string {
 	parts := strings.Split(pattern, "/")
 	var collectionParts []string
@@ -806,3 +810,4 @@ func apiVersion(overrides *Config) string {
 	}
 	return ""
 }
+

@@ -65,3 +65,87 @@ func TestInferTrackFromPackage(t *testing.T) {
 		})
 	}
 }
+
+func TestGetVerb(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		methodName string
+		want       string
+	}{
+		{"Get", "GetInstance", "describe"},
+		{"List", "ListInstances", "list"},
+		{"Create", "CreateInstance", "create"},
+		{"Update", "UpdateInstance", "update"},
+		{"Delete", "DeleteInstance", "delete"},
+		{"Custom", "DetachDisk", "detach_disk"},
+		{"Empty", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := getVerb(test.methodName)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetPluralFromPattern(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "instances"},
+		{"Short", "shelves/{shelf}", "shelves"},
+		{"No Variable End", "projects/{project}/locations", ""},
+		{"Empty", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := getPluralFromPattern(test.pattern)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetSingularFromPattern(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "instance"},
+		{"Short", "shelves/{shelf}", "shelf"},
+		{"No Variable End", "projects/{project}/locations", ""},
+		{"Empty", "", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := getSingularFromPattern(test.pattern)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetCollectionPathFromPattern(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{"Standard", "projects/{project}/locations/{location}/instances/{instance}", "projects.locations.instances"},
+		{"Short", "shelves/{shelf}", "shelves"},
+		{"Root", "projects/{project}", "projects"},
+		{"Mixed", "organizations/{organization}/locations/{location}/clusters/{cluster}", "organizations.locations.clusters"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := getCollectionPathFromPattern(test.pattern)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf(" mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
