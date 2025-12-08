@@ -104,7 +104,9 @@ func readGcloudConfig(path string) (*Config, error) {
 
 func generateService(service *api.Service, overrides *Config, model *api.API, output string) error {
 	// Determine short service name for directory structure.
-	// TODO(santiquiroga): add documentation/ logic on why we can use default host instead of service config name
+	// The `shortServiceName` is derived from `service.DefaultHost` (e.g., "parallelstore.googleapis.com" -> "parallelstore").
+	// `service.DefaultHost`  matches the name field in the service config file
+	// (e.g., `default_host` for parallelstore is derived from `parallelstore_v1.yaml` name field).
 	shortServiceName := ""
 	hostParts := strings.Split(service.DefaultHost, ".")
 	if len(hostParts) > 0 {
@@ -129,7 +131,6 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 		// For each method, we determine the plural name of the resource it operates on.
 		// This plural name (e.g., "instances") will serve as our collection ID.
 		// Example: For the `CreateInstance` method, this will return "instances".
-		// TODO(santiquiroga): we might be able to leverage .ID instead
 		collectionID := getPluralResourceNameForMethod(method, model)
 
 		// If a collection ID is found, we add the method to our map.
@@ -172,7 +173,12 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 	for _, method := range methods {
 		// We map the API method name to a standard gcloud command verb.
 		// Example: `CreateInstance` -> "create"
-		verb := getVerb(method.Name)
+		verb, err := getVerb(method.Name)
+		if err != nil {
+			// Continue to the next method if we can't determine a verb,
+			// logging the issue might be useful here in the future.
+			continue
+		}
 
 		// We construct the complete command definition from the API method.
 		// This involves generating all the arguments, help text, and request details.
@@ -534,7 +540,6 @@ func newAsync(method *api.Method, overrides *Config) *Async {
 // ==========================================
 
 // isPrimaryResource determines if a field represents the primary resource of a method.
-// TODO(santiquiroga): revice the logic for getting the primary resource of a method
 func isPrimaryResource(field *api.Field, method *api.Method) bool {
 	if method.InputType == nil {
 		return false
@@ -659,22 +664,24 @@ func getGcloudType(t api.Typez) string {
 }
 
 // getVerb maps an API method name to a standard gcloud command verb.
-func getVerb(methodName string) string {
+func getVerb(methodName string) (string, error) {
+	if methodName == "" {
+		return "", fmt.Errorf("method name cannot be empty")
+	}
 	switch {
 	case strings.HasPrefix(methodName, "Get"):
-		return "describe"
+		return "describe", nil
 	case strings.HasPrefix(methodName, "List"):
-		return "list"
+		return "list", nil
 	case strings.HasPrefix(methodName, "Create"):
-		return "create"
+		return "create", nil
 	case strings.HasPrefix(methodName, "Update"):
-		return "update"
+		return "update", nil
 	case strings.HasPrefix(methodName, "Delete"):
-		return "delete"
+		return "delete", nil
 	default:
 		// For non-standard methods, we just use the snake_case version of the method name.
-		// TODO(santiquiroga): we might want to return an error when the method is empty
-		return strcase.ToSnake(methodName)
+		return strcase.ToSnake(methodName), nil
 	}
 }
 
