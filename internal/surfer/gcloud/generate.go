@@ -144,7 +144,7 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 	for collectionID, methods := range methodsByResource {
 		// The `generateResourceCommands` function will handle the creation of the
 		// directory structure and YAML files for this specific resource.
-		err := generateResourceCommands(collectionID, methods, surfaceDir, overrides, model)
+		err := generateResourceCommands(collectionID, methods, surfaceDir, overrides, model, service)
 		if err != nil {
 			return err
 		}
@@ -157,7 +157,7 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 //
 // For a given collectionID like "instances", this function will create a directory
 // `instances/` and populate it with `create.yaml`, `delete.yaml`, etc.
-func generateResourceCommands(collectionID string, methods []*api.Method, baseDir string, overrides *Config, model *api.API) error {
+func generateResourceCommands(collectionID string, methods []*api.Method, baseDir string, overrides *Config, model *api.API, service *api.Service) error {
 	// The main directory for the resource is named after its collection ID.
 	// Example: `{baseDir}/instances`
 	resourceDir := filepath.Join(baseDir, collectionID)
@@ -182,7 +182,7 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 
 		// We construct the complete command definition from the API method.
 		// This involves generating all the arguments, help text, and request details.
-		cmd := newCommand(method, overrides, model)
+		cmd := newCommand(method, overrides, model, service)
 
 		// in gcloud convention, the final YAML file must contain a list of commands,
 		// even if there is only one.
@@ -224,7 +224,7 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 // newCommand constructs a single gcloud command definition from an API method.
 // This function assembles all the necessary pieces: help text, arguments,
 // request details, and async configuration.
-func newCommand(method *api.Method, overrides *Config, model *api.API) *Command {
+func newCommand(method *api.Method, overrides *Config, model *api.API, service *api.Service) *Command {
 	// We look up the help text and API definition for this specific method in the
 	// `gcloud.yaml` configuration file.
 	rule := findHelpTextRule(method, overrides)
@@ -252,7 +252,7 @@ func newCommand(method *api.Method, overrides *Config, model *api.API) *Command 
 
 	// The core of the command generation happens here: we generate the arguments,
 	// request details, and async configuration.
-	cmd.Arguments = newArguments(method, overrides, model)
+	cmd.Arguments = newArguments(method, overrides, model, service)
 	cmd.Request = newRequest(method, overrides, model)
 	if method.OperationInfo != nil {
 		cmd.Async = newAsync(method, overrides)
@@ -263,7 +263,7 @@ func newCommand(method *api.Method, overrides *Config, model *api.API) *Command 
 
 // newArguments generates the set of arguments for a command by parsing the
 // fields of the method's request message.
-func newArguments(method *api.Method, overrides *Config, model *api.API) Arguments {
+func newArguments(method *api.Method, overrides *Config, model *api.API, service *api.Service) Arguments {
 	args := Arguments{}
 	if method.InputType == nil {
 		return args
@@ -281,7 +281,7 @@ func newArguments(method *api.Method, overrides *Config, model *api.API) Argumen
 		// For example, in a `CreateInstance` method, this would be the `instance_id` field.
 		if isPrimaryResource(field, method) {
 			// If it is the primary resource, we generate a special positional argument for it.
-			param := newPrimaryResourceParam(field, method, model, overrides)
+			param := newPrimaryResourceParam(field, method, model, overrides, service)
 			args.Params = append(args.Params, param)
 			continue
 		}
@@ -289,7 +289,7 @@ func newArguments(method *api.Method, overrides *Config, model *api.API) Argumen
 		// For all other fields, we generate a standard flag argument. If the field
 		// is a nested message, its fields will be "flattened" into top-level flags.
 		// For example, a field `instance.description` becomes the `--description` flag.
-		addFlattenedParams(field, field.JSONName, &args, overrides, model)
+		addFlattenedParams(field, field.JSONName, &args, overrides, model, service)
 	}
 	return args
 }
@@ -297,7 +297,7 @@ func newArguments(method *api.Method, overrides *Config, model *api.API) Argumen
 // addFlattenedParams recursively processes a field and its sub-fields to generate
 // a flat list of command-line flags. This is necessary for nested messages in
 // the request proto.
-func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overrides *Config, model *api.API) {
+func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overrides *Config, model *api.API, service *api.Service) {
 	// We skip fields that are marked as `OUTPUT_ONLY` in the proto, as these are
 	// not meant to be provided by the user. We also skip the "name" field, as it's
 	// handled by the primary resource argument.
@@ -317,18 +317,18 @@ func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overri
 			// Continuing the example: when processing the `capacity_gib` field inside the
 			// `Instance` message, the prefix will become "instance.capacityGib". This
 			// results in a `--capacity-gib` flag that maps to the correct nested field.
-			addFlattenedParams(f, fmt.Sprintf("%s.%s", prefix, f.JSONName), args, overrides, model)
+			addFlattenedParams(f, fmt.Sprintf("%s.%s", prefix, f.JSONName), args, overrides, model, service)
 		}
 		return
 	}
 
 	// If the field is a scalar, map, or enum, we generate a parameter for it.
-	param := newParam(field, prefix, overrides, model)
+	param := newParam(field, prefix, overrides, model, service)
 	args.Params = append(args.Params, param)
 }
 
 // newParam creates a single command-line argument (a `Param` struct) from a proto field.
-func newParam(field *api.Field, apiField string, overrides *Config, model *api.API) Param {
+func newParam(field *api.Field, apiField string, overrides *Config, model *api.API, service *api.Service) Param {
 	// We initialize the Param with the basic information derived from the field.
 	param := Param{
 		// The command-line flag name is the kebab-case version of the field name.
@@ -347,7 +347,7 @@ func newParam(field *api.Field, apiField string, overrides *Config, model *api.A
 		// If the field is a resource reference (e.g., a field for a network), we
 		// generate a `ResourceSpec` for it. This tells gcloud how to parse the
 		// resource name provided by the user.
-		param.ResourceSpec = newResourceReferenceSpec(field, model, overrides)
+		param.ResourceSpec = newResourceReferenceSpec(field, model, overrides, service)
 		param.ResourceMethodParams = map[string]string{
 			apiField: "{__relative_name__}",
 		}
@@ -389,7 +389,7 @@ func newParam(field *api.Field, apiField string, overrides *Config, model *api.A
 
 // newPrimaryResourceParam creates the main positional resource argument for a command.
 // This is the argument that represents the resource being acted upon (e.g., the instance name).
-func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, _ *Config) Param {
+func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, _ *Config, service *api.Service) Param {
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
 	var segments []api.PathSegment
@@ -400,8 +400,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// We construct the gcloud collection path from the resource's pattern string.
 	// Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
 	collectionPath := getCollectionPathFromSegments(segments)
-	// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
-	hostParts := strings.Split(model.Services[0].DefaultHost, ".")
+	hostParts := strings.Split(service.DefaultHost, ".")
 	shortServiceName := hostParts[0]
 
 	// We determine the singular name of the resource.
@@ -436,7 +435,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 
 // newResourceReferenceSpec creates a ResourceSpec for a field that references
 // another resource type (e.g., a `--network` flag).
-func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Config) *ResourceSpec {
+func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Config, service *api.Service) *ResourceSpec {
 	// We iterate through all the resource definitions in the API model to find the
 	// one that matches the type of our resource reference.
 	for _, def := range model.ResourceDefinitions {
@@ -458,8 +457,7 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Confi
 
 			// We construct the full gcloud collection path for the referenced resource
 			//assuming the current service is the current command.
-			// TODO: (issues/support_multiple_services.md) For now, we assume a single service in the model. We need to support looping over `model.Services`.
-			hostParts := strings.Split(model.Services[0].DefaultHost, ".")
+			hostParts := strings.Split(service.DefaultHost, ".")
 			shortServiceName := hostParts[0]
 			baseCollectionPath := getCollectionPathFromSegments(segments)
 			fullCollectionPath := fmt.Sprintf("%s.%s", shortServiceName, baseCollectionPath)
