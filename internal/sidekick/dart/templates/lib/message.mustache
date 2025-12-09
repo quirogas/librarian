@@ -50,15 +50,23 @@ final class {{Codec.Name}} extends {{Codec.Model.Codec.ProtoPrefix}}ProtoMessage
   super(fullyQualifiedName){{Codec.ConstructorBody}}
 
   {{#Codec.HasCustomEncoding}}
-  factory {{Codec.Name}}.fromJson(Object json) => _{{Codec.Name}}Helper.decode(json);
+  factory {{Codec.Name}}.fromJson(Object? json) => _{{Codec.Name}}Helper.decode(json);
   {{/Codec.HasCustomEncoding}}
   {{^Codec.HasCustomEncoding}}
-  factory {{Codec.Name}}.fromJson(Map<String, dynamic> json) =>
-    {{Codec.Name}}(
-      {{#Fields}}
-      {{{Codec.Name}}}: {{{Codec.FromJson}}},
-      {{/Fields}}
-    );
+  factory {{Codec.Name}}.fromJson(Object? j) 
+    {{#Codec.HasFields}}
+    {
+      final json = j as Map<String, Object?>;
+      return {{Codec.Name}}(
+        {{#Fields}}
+        {{{Codec.Name}}}: {{{Codec.FromJson}}},
+        {{/Fields}}
+      );
+    }
+    {{/Codec.HasFields}}
+    {{^Codec.HasFields}}
+    => {{Codec.Name}}();
+    {{/Codec.HasFields}}
   {{/Codec.HasCustomEncoding}}
 
   @override

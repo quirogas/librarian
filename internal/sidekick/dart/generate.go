@@ -15,6 +15,7 @@
 package dart
 
 import (
+	"context"
 	"embed"
 	"path/filepath"
 
@@ -23,11 +24,11 @@ import (
 	"github.com/googleapis/librarian/internal/sidekick/language"
 )
 
-//go:embed templates
+//go:embed all:templates
 var dartTemplates embed.FS
 
 // Generate generates Dart code from the model.
-func Generate(model *api.API, outdir string, config *config.Config) error {
+func Generate(ctx context.Context, model *api.API, outdir string, config *config.Config) error {
 	annotate := newAnnotateModel(model)
 	if err := annotate.annotateModel(config.Codec); err != nil {
 		return err
@@ -39,7 +40,7 @@ func Generate(model *api.API, outdir string, config *config.Config) error {
 		// Check if we're configured to skip formatting.
 		skipFormat := config.Codec["skip-format"]
 		if skipFormat != "true" {
-			err = formatDirectory(outdir)
+			err = formatDirectory(ctx, outdir)
 		}
 	}
 	return err

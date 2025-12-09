@@ -29,14 +29,14 @@ func TestParse(t *testing.T) {
 	for _, test := range []struct {
 		name          string
 		version       string
-		want          *Version
+		want          version
 		wantErr       bool
 		wantErrPhrase string
 	}{
 		{
 			name:    "valid version",
 			version: "1.2.3",
-			want: &Version{
+			want: version{
 				Major: 1,
 				Minor: 2,
 				Patch: 3,
@@ -51,7 +51,7 @@ func TestParse(t *testing.T) {
 		{
 			name:    "valid version with prerelease",
 			version: "1.2.3-alpha.1",
-			want: &Version{
+			want: version{
 				Major:               1,
 				Minor:               2,
 				Patch:               3,
@@ -63,7 +63,7 @@ func TestParse(t *testing.T) {
 		{
 			name:    "valid version with format 1.2.3-betaXX",
 			version: "1.2.3-beta21",
-			want: &Version{
+			want: version{
 				Major:            1,
 				Minor:            2,
 				Patch:            3,
@@ -74,7 +74,7 @@ func TestParse(t *testing.T) {
 		{
 			name:    "valid version with prerelease without version",
 			version: "1.2.3-beta",
-			want: &Version{
+			want: version{
 				Major:      1,
 				Minor:      2,
 				Patch:      3,
@@ -82,10 +82,13 @@ func TestParse(t *testing.T) {
 			},
 		},
 		{
-			name:          "invalid version",
-			version:       "1.2",
-			wantErr:       true,
-			wantErrPhrase: "invalid version format",
+			name:    "valid shortened version",
+			version: "1.2",
+			want: version{
+				Major: 1,
+				Minor: 2,
+				Patch: 0,
+			},
 		},
 		{
 			name:          "invalid prerelease number with separator",
@@ -95,7 +98,7 @@ func TestParse(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			actual, err := Parse(test.version)
+			actual, err := parse(test.version)
 			if test.wantErr {
 				if err == nil {
 					t.Fatal("Parse() should have failed")
@@ -118,12 +121,12 @@ func TestParse(t *testing.T) {
 func TestVersion_String(t *testing.T) {
 	for _, test := range []struct {
 		name     string
-		version  *Version
+		version  version
 		expected string
 	}{
 		{
 			name: "simple version",
-			version: &Version{
+			version: version{
 				Major: 1,
 				Minor: 2,
 				Patch: 3,
@@ -132,7 +135,7 @@ func TestVersion_String(t *testing.T) {
 		},
 		{
 			name: "with prerelease",
-			version: &Version{
+			version: version{
 				Major:               1,
 				Minor:               2,
 				Patch:               3,
@@ -144,7 +147,7 @@ func TestVersion_String(t *testing.T) {
 		},
 		{
 			name: "with prerelease no separator",
-			version: &Version{
+			version: version{
 				Major:            1,
 				Minor:            2,
 				Patch:            3,
@@ -155,7 +158,7 @@ func TestVersion_String(t *testing.T) {
 		},
 		{
 			name: "with prerelease no version",
-			version: &Version{
+			version: version{
 				Major:      1,
 				Minor:      2,
 				Patch:      3,
@@ -252,152 +255,95 @@ func TestDeriveNext(t *testing.T) {
 	}
 }
 
-func TestCompare(t *testing.T) {
+func TestDeriveNextOptions_DeriveNext(t *testing.T) {
 	for _, test := range []struct {
-		name     string
-		versionA string
-		versionB string
-		want     int
+		name            string
+		highestChange   ChangeLevel
+		currentVersion  string
+		expectedVersion string
+		opts            DeriveNextOptions
 	}{
 		{
-			name:     "equal",
-			versionA: "1.2.3",
-			versionB: "1.2.3",
-			want:     0,
+			name:            "major bump",
+			highestChange:   Major,
+			currentVersion:  "1.2.3",
+			expectedVersion: "2.0.0",
 		},
 		{
-			name:     "equal with pre-release",
-			versionA: "1.2.3-alpha",
-			versionB: "1.2.3-alpha",
-			want:     0,
+			name:            "minor bump",
+			highestChange:   Minor,
+			currentVersion:  "1.2.3",
+			expectedVersion: "1.3.0",
 		},
 		{
-			name:     "equal with pre-release and number",
-			versionA: "1.2.3-alpha4",
-			versionB: "1.2.3-alpha4",
-			want:     0,
+			name:            "patch bump",
+			highestChange:   Patch,
+			currentVersion:  "1.2.3",
+			expectedVersion: "1.2.4",
 		},
 		{
-			name:     "equal with pre-release and number, different separator",
-			versionA: "1.2.3-alpha4",
-			versionB: "1.2.3-alpha.4",
-			want:     0,
+			name:            "pre-1.0.0 feat is patch bump",
+			highestChange:   Minor, // feat is minor
+			currentVersion:  "0.2.3",
+			expectedVersion: "0.3.0",
 		},
 		{
-			name:     "less than patch",
-			versionA: "1.2.3",
-			versionB: "1.2.4",
-			want:     -1,
+			name:            "pre-1.0.0 fix is patch bump",
+			highestChange:   Patch,
+			currentVersion:  "0.2.3",
+			expectedVersion: "0.2.4",
 		},
 		{
-			name:     "less than minor",
-			versionA: "1.2.3",
-			versionB: "1.3.0",
-			want:     -1,
+			name:            "pre-1.0.0 breaking change is minor bump",
+			highestChange:   Major,
+			currentVersion:  "0.2.3",
+			expectedVersion: "0.3.0",
 		},
 		{
-			name:     "less than major",
-			versionA: "1.2.3",
-			versionB: "2.0.0",
-			want:     -1,
+			name:            "prerelease bump with numeric trailer",
+			highestChange:   Minor,
+			currentVersion:  "1.2.3-beta.1",
+			expectedVersion: "1.2.3-beta.2",
 		},
 		{
-			name:     "less than prerelease",
-			versionA: "1.2.3-alpha",
-			versionB: "1.2.3-beta",
-			want:     -1,
+			name:            "prerelease bump without numeric trailer",
+			highestChange:   Patch,
+			currentVersion:  "1.2.3-beta",
+			expectedVersion: "1.2.3-beta.1",
 		},
 		{
-			name:     "less than prerelease number",
-			versionA: "1.2.3-alpha1",
-			versionB: "1.2.3-alpha2",
-			want:     -1,
+			name:            "prerelease bump with betaXX format",
+			highestChange:   Major,
+			currentVersion:  "1.2.3-beta21",
+			expectedVersion: "1.2.3-beta22",
 		},
 		{
-			name:     "less than prerelease number with separator",
-			versionA: "1.2.3-alpha.1",
-			versionB: "1.2.3-alpha.2",
-			want:     -1,
+			name:            "no bump",
+			highestChange:   None,
+			currentVersion:  "1.2.3",
+			expectedVersion: "1.2.3",
 		},
 		{
-			name:     "less than prerelease against stable",
-			versionA: "1.2.3-alpha1",
-			versionB: "1.2.3",
-			want:     -1,
+			name:            "prerelease with bump core option",
+			highestChange:   Minor,
+			currentVersion:  "1.2.3-alpha",
+			expectedVersion: "1.3.0-alpha",
+			opts:            DeriveNextOptions{BumpVersionCore: true},
 		},
 		{
-			name:     "less than prerelease without number",
-			versionA: "1.2.3-alpha",
-			versionB: "1.2.3-alpha1",
-			want:     -1,
-		},
-		{
-			name:     "greater than patch",
-			versionA: "1.2.4",
-			versionB: "1.2.3",
-			want:     1,
-		},
-		{
-			name:     "greater than minor",
-			versionA: "1.3.0",
-			versionB: "1.2.3",
-			want:     1,
-		},
-		{
-			name:     "greater than major",
-			versionA: "2.0.0",
-			versionB: "1.2.3",
-			want:     1,
-		},
-		{
-			name:     "greater than prerelease",
-			versionA: "1.2.3-beta",
-			versionB: "1.2.3-alpha",
-			want:     1,
-		},
-		{
-			name:     "greater than prerelease number",
-			versionA: "1.2.3-alpha2",
-			versionB: "1.2.3-alpha1",
-			want:     1,
-		},
-		{
-			name:     "greater than prerelease number with separator",
-			versionA: "1.2.3-alpha.2",
-			versionB: "1.2.3-alpha.1",
-			want:     1,
-		},
-		{
-			name:     "greater than prerelease against stable",
-			versionA: "1.2.3",
-			versionB: "1.2.3-alpha1",
-			want:     1,
-		},
-		{
-			name:     "greater than prerelease without number",
-			versionA: "1.2.3-alpha1",
-			versionB: "1.2.3-alpha",
-			want:     1,
-		},
-		{
-			// Note: This is SemVer compliant, but may seem odd in practice.
-			name:     "greater prerelease version core than non-prerelease version core",
-			versionA: "1.2.3-alpha1",
-			versionB: "1.2.0",
-			want:     1,
+			name:            "prerelease with numeric trailer and bump core option",
+			highestChange:   Minor,
+			currentVersion:  "1.2.3-alpha.5",
+			expectedVersion: "1.3.0-alpha.1",
+			opts:            DeriveNextOptions{BumpVersionCore: true},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			a, err := Parse(test.versionA)
+			nextVersion, err := test.opts.DeriveNext(test.highestChange, test.currentVersion)
 			if err != nil {
-				t.Fatalf("Parse() returned an error: %v", err)
+				t.Fatalf("DeriveNext() returned an error: %v", err)
 			}
-			b, err := Parse(test.versionB)
-			if err != nil {
-				t.Fatalf("Parse() returned an error: %v", err)
-			}
-			got := a.Compare(b)
-			if diff := cmp.Diff(test.want, got); diff != "" {
+			if diff := cmp.Diff(test.expectedVersion, nextVersion); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})

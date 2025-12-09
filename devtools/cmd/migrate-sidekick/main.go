@@ -27,18 +27,23 @@ import (
 	"strings"
 
 	"github.com/googleapis/librarian/internal/config"
+	"github.com/googleapis/librarian/internal/librarian"
 	"github.com/googleapis/librarian/internal/yaml"
 	"github.com/pelletier/go-toml/v2"
 )
 
 const (
-	sidekickFile = ".sidekick.toml"
+	sidekickFile            = ".sidekick.toml"
+	discoveryArchivePrefix  = "https://github.com/googleapis/discovery-artifact-manager/archive/"
+	googleapisArchivePrefix = "https://github.com/googleapis/googleapis/archive/"
+	tarballSuffix           = ".tar.gz"
 )
 
 var (
-	errRepoNotFound     = errors.New("-repo flag is required")
+	errRepoNotFound     = errors.New("repo path argument is required")
 	errSidekickNotFound = errors.New(".sidekick.toml not found")
 	errSrcNotFound      = errors.New("src/generated directory not found")
+	errTidyFailed       = errors.New("librarian tidy failed")
 )
 
 // SidekickConfig represents the structure of a .sidekick.toml file.
@@ -46,6 +51,7 @@ type SidekickConfig struct {
 	General struct {
 		SpecificationSource string `toml:"specification-source"`
 		ServiceConfig       string `toml:"service-config"`
+		SpecificationFormat string `toml:"specification-format"`
 	} `toml:"general"`
 	Source                 map[string]interface{} `toml:"source"`
 	Codec                  map[string]interface{} `toml:"codec"`
@@ -78,26 +84,26 @@ func main() {
 
 func run(args []string) error {
 	flagSet := flag.NewFlagSet("migrate-sidekick", flag.ContinueOnError)
-	repoPath := flagSet.String("repo", "", "Path to the google-cloud-rust repository (required)")
-	outputPath := flagSet.String("output", "./.librarian.yaml", "Output file path (default: ./.librarian.yaml)")
-	if err := flagSet.Parse(args[1:]); err != nil {
+	outputPath := flagSet.String("output", "./librarian.yaml", "Output file path (default: ./librarian.yaml)")
+	if err := flagSet.Parse(args); err != nil {
 		return err
 	}
 
-	if *repoPath == "" {
+	if flagSet.NArg() < 1 {
 		return errRepoNotFound
 	}
+	repoPath := flagSet.Arg(0)
 
 	slog.Info("Reading sidekick.toml...", "path", repoPath)
 
 	// Read root .sidekick.toml for defaults
-	defaults, err := readRootSidekick(*repoPath)
+	defaults, err := readRootSidekick(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to read root .sidekick.toml: %w", err)
 	}
 
 	// Find all .sidekick.toml files
-	sidekickFiles, err := findSidekickFiles(*repoPath)
+	sidekickFiles, err := findSidekickFiles(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to find sidekick.toml files: %w", err)
 	}
@@ -114,6 +120,11 @@ func run(args []string) error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 	slog.Info("Wrote config to output file", "path", outputPath)
+
+	if err := librarian.RunTidy(); err != nil {
+		slog.Error(errTidyFailed.Error(), "error", err)
+		return errTidyFailed
+	}
 
 	return nil
 }
@@ -134,8 +145,13 @@ func readRootSidekick(repoPath string) (*config.Config, error) {
 
 	releaseLevel, _ := sidekick.Codec["release-level"].(string)
 	warnings, _ := sidekick.Codec["disabled-rustdoc-warnings"].(string)
-	googleapisCommitSHA, _ := sidekick.Source["googleapis-sha256"].(string)
-	discoveryCommitSHA, _ := sidekick.Source["discovery-sha256"].(string)
+	discoverySHA256, _ := sidekick.Source["discovery-sha256"].(string)
+	discoveryRoot, _ := sidekick.Source["discovery-root"].(string)
+	googleapisSHA256, _ := sidekick.Source["googleapis-sha256"].(string)
+	googleapisRoot, _ := sidekick.Source["googleapis-root"].(string)
+
+	discoveryCommit := strings.TrimSuffix(strings.TrimPrefix(discoveryRoot, discoveryArchivePrefix), tarballSuffix)
+	googleapisCommit := strings.TrimSuffix(strings.TrimPrefix(googleapisRoot, googleapisArchivePrefix), tarballSuffix)
 
 	// Parse package dependencies
 	packageDependencies := parsePackageDependencies(sidekick.Codec)
@@ -144,10 +160,12 @@ func readRootSidekick(repoPath string) (*config.Config, error) {
 		Language: "rust",
 		Sources: &config.Sources{
 			Discovery: &config.Source{
-				Commit: discoveryCommitSHA,
+				Commit: discoveryCommit,
+				SHA256: discoverySHA256,
 			},
 			Googleapis: &config.Source{
-				Commit: googleapisCommitSHA,
+				Commit: googleapisCommit,
+				SHA256: googleapisSHA256,
 			},
 		},
 		Default: &config.Default{
@@ -189,6 +207,8 @@ func parsePackageDependency(name, spec string) *config.RustPackageDependency {
 			dep.UsedIf = value
 		case "feature":
 			dep.Feature = value
+		case "ignore":
+			dep.Ignore = value == "true"
 		}
 	}
 
@@ -241,8 +261,13 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 		if apiPath == "" {
 			continue
 		}
-		// Get Service config
+
 		serviceConfig := sidekick.General.ServiceConfig
+
+		specificationFormat := sidekick.General.SpecificationFormat
+		if specificationFormat == "disco" {
+			specificationFormat = "discovery"
+		}
 
 		// Read Cargo.toml in the same directory to get the actual library name
 		dir := filepath.Dir(file)
@@ -270,6 +295,7 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 			}
 			libraries[libraryName] = lib
 		}
+		lib.SpecificationFormat = specificationFormat
 
 		// Add channels
 		lib.Channels = append(lib.Channels, &config.Channel{
@@ -313,7 +339,6 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 		packageNameOverride, _ := sidekick.Codec["package-name-override"].(string)
 		rootName, _ := sidekick.Codec["root-name"].(string)
 		defaultFeatures, _ := sidekick.Codec["default-features"].(string)
-		extraModules, _ := sidekick.Codec["extra-modules"].(string)
 		disabledClippyWarnings, _ := sidekick.Codec["disabled-clippy-warnings"].(string)
 		hasVeneer, _ := sidekick.Codec["has-veneer"].(string)
 		routingRequired, _ := sidekick.Codec["routing-required"].(string)
@@ -359,7 +384,6 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 			RootName:                  rootName,
 			Roots:                     strToSlice(roots),
 			DefaultFeatures:           strToSlice(defaultFeatures),
-			ExtraModules:              strToSlice(extraModules),
 			IncludeList:               strToSlice(includeList),
 			IncludedIds:               strToSlice(includeIds),
 			SkippedIds:                strToSlice(skippedIds),

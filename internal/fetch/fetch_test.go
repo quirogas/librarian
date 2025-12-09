@@ -26,6 +26,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,7 +90,7 @@ func TestSha256(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := Sha256(server.URL + tarballPath)
+	got, err := urlSha256(server.URL + tarballPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestSha256Error(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := Sha256(test.url); err == nil {
+			if _, err := urlSha256(test.url); err == nil {
 				t.Error("expected an error from Sha256()")
 			}
 		})
@@ -129,8 +130,8 @@ func TestSha256Error(t *testing.T) {
 
 func TestLatestSha(t *testing.T) {
 	const (
-		getLatestShaPath = "/repos/googleapis/googleapis/commits/master"
-		latestSha        = "5d5b1bf126485b0e2c972bac41b376438601e266"
+		getLatestShaPath  = "/repos/googleapis/googleapis/commits/master"
+		expectedCommitSha = "5d5b1bf126485b0e2c972bac41b376438601e266"
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,16 +144,16 @@ func TestLatestSha(t *testing.T) {
 			t.Fatalf("mismatched Accept header for %q, got=%q, want=%s", r.URL.Path, got, want)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(latestSha))
+		w.Write([]byte(expectedCommitSha))
 	}))
 	defer server.Close()
 
-	got, err := LatestSha(server.URL + getLatestShaPath)
+	got, err := latestSha(server.URL + getLatestShaPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != latestSha {
-		t.Errorf("LatestSha() = %q, want %q", got, latestSha)
+	if got != expectedCommitSha {
+		t.Errorf("LatestSha() = %q, want %q", got, expectedCommitSha)
 	}
 }
 
@@ -178,7 +179,7 @@ func TestLatestShaError(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := LatestSha(test.url); err == nil {
+			if _, err := latestSha(test.url); err == nil {
 				t.Error("expected an error from LatestSha()")
 			}
 		})
@@ -529,41 +530,166 @@ func TestDownloadTarballErrors(t *testing.T) {
 	}
 }
 
-func TestDownloadTarballRetry(t *testing.T) {
-	t.Run("succeeds after a few retries", func(t *testing.T) {
-		// Set a short backoff for this test to speed up retries.
-		defaultBackoff = time.Millisecond
-		t.Cleanup(func() {
-			defaultBackoff = 10 * time.Second
-		})
-		testDir := t.TempDir()
-		tarball := makeTestContents(t)
-		var requestCount int
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requestCount++
-			if requestCount < 3 {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
+func TestDownloadTarballEmptySha(t *testing.T) {
+	target := path.Join(t.TempDir(), "target")
+	err := DownloadTarball(t.Context(), target, "https://any-url", "")
+	if !errors.Is(err, errMissingSHA256) {
+		t.Errorf("expected errMissingSHA256, got: %v", err)
+	}
+}
+
+func TestLatestCommitAndChecksum(t *testing.T) {
+	const (
+		expectedCommit          = "testcommit123"
+		expectedTarballContents = "mock tarball content for checksum"
+		testOrg                 = "testorg"
+		testRepo                = "testrepo"
+	)
+	// Calculate the expected SHA256 for the tarball contents.
+	hasher := sha256.New()
+	hasher.Write([]byte(expectedTarballContents))
+	expectedTarballSHA256 := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case fmt.Sprintf("/repos/%s/%s/commits/%s", testOrg, testRepo, branch):
+			// Mock response for LatestSha call
+			w.Header().Set("Accept", "application/vnd.github.VERSION.sha")
 			w.WriteHeader(http.StatusOK)
-			w.Write(tarball.Contents)
+			w.Write([]byte(expectedCommit))
+		case fmt.Sprintf("/%s/%s/archive/%s.tar.gz", testOrg, testRepo, expectedCommit):
+			// Mock response for Sha256 call (tarball download)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(expectedTarballContents))
+		default:
+			t.Errorf("unexpected request path: %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	endpoints := &Endpoints{
+		API:      server.URL,
+		Download: server.URL,
+	}
+	repo := &Repo{
+		Org:  testOrg,
+		Repo: testRepo,
+	}
+
+	gotCommit, gotSha256, err := LatestCommitAndChecksum(endpoints, repo)
+	if err != nil {
+		t.Fatalf("LatestCommitAndChecksum() error = %v, wantErr %v", err, nil)
+	}
+
+	if gotCommit != expectedCommit {
+		t.Errorf("LatestCommitAndChecksum() gotCommit = %q, want %q", gotCommit, expectedCommit)
+	}
+	if gotSha256 != expectedTarballSHA256 {
+		t.Errorf("LatestCommitAndChecksum() gotSha256 = %q, want %q", gotSha256, expectedTarballSHA256)
+	}
+}
+
+func TestDownloadTarballRetryErrorIncludesLastFailure(t *testing.T) {
+	defaultBackoff = time.Millisecond
+	t.Cleanup(func() {
+		defaultBackoff = 10 * time.Second
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	target := path.Join(t.TempDir(), "target-file")
+	err := DownloadTarball(t.Context(), target, server.URL+"/test.tar.gz", "any-sha")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), "<nil>") {
+		t.Errorf("error should contain the last failure, not <nil>: %v", err)
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error should mention the HTTP status code: %v", err)
+	}
+}
+
+func TestDownloadTarballRetrySucceeds(t *testing.T) {
+	defaultBackoff = time.Millisecond
+	t.Cleanup(func() {
+		defaultBackoff = 10 * time.Second
+	})
+	tarball := makeTestContents(t)
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(tarball.Contents)
+	}))
+	defer server.Close()
+
+	target := path.Join(t.TempDir(), "target-file")
+	if err := DownloadTarball(t.Context(), target, server.URL+"/test.tar.gz", tarball.Sha256); err != nil {
+		t.Fatal(err)
+	}
+
+	if requestCount != 3 {
+		t.Errorf("expected 3 requests, got %d", requestCount)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(tarball.Contents, got); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestLatestCommitAndChecksumFailure(t *testing.T) {
+	const (
+		commit   = "test-commit-sha"
+		testOrg  = "test-org"
+		testRepo = "test-repo"
+	)
+
+	t.Run("LatestSha fails", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Fail the first call, which is to get the latest SHA
+			http.Error(w, "failed to get latest sha", http.StatusInternalServerError)
 		}))
 		defer server.Close()
 
-		target := path.Join(testDir, "target-file")
-		if err := DownloadTarball(t.Context(), target, server.URL+"/test.tar.gz", tarball.Sha256); err != nil {
-			t.Fatal(err)
-		}
+		endpoints := &Endpoints{API: server.URL, Download: server.URL}
+		repo := &Repo{Org: testOrg, Repo: testRepo}
 
-		if requestCount != 3 {
-			t.Errorf("expected 3 requests, got %d", requestCount)
+		_, _, err := LatestCommitAndChecksum(endpoints, repo)
+		if err == nil {
+			t.Error("expected an error when LatestSha fails, but got nil")
 		}
-		got, err := os.ReadFile(target)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if diff := cmp.Diff(tarball.Contents, got); diff != "" {
-			t.Errorf("mismatch (-want +got):\n%s", diff)
+	})
+
+	t.Run("Sha256 fails", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The first call is for the latest SHA, which should succeed.
+			if strings.HasSuffix(r.URL.Path, "/commits/master") {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(commit))
+				return
+			}
+			// The second call is for the tarball, which should fail.
+			http.Error(w, "failed to download tarball", http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		endpoints := &Endpoints{API: server.URL, Download: server.URL}
+		repo := &Repo{Org: testOrg, Repo: testRepo}
+
+		_, _, err := LatestCommitAndChecksum(endpoints, repo)
+		if err == nil {
+			t.Error("expected an error when Sha256 fails, but got nil")
 		}
 	})
 }

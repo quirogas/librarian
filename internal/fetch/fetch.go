@@ -30,10 +30,15 @@ import (
 	"time"
 )
 
+const branch = "master"
+
 var (
 	errChecksumMismatch = errors.New("checksum mismatch")
+	errMissingSHA256    = errors.New("expectedSha256 is required")
 	defaultBackoff      = 10 * time.Second
 )
+
+const maxDownloadRetries = 3
 
 // Endpoints defines the endpoints used to access GitHub.
 type Endpoints struct {
@@ -70,9 +75,9 @@ func RepoFromTarballLink(githubDownload, tarballLink string) (*Repo, error) {
 	return repo, nil
 }
 
-// Sha256 downloads the content from the given URL and returns its SHA256
+// urlSha256 downloads the content from the given URL and returns its SHA256
 // checksum as a hex string.
-func Sha256(query string) (string, error) {
+func urlSha256(query string) (string, error) {
 	response, err := http.Get(query)
 	if err != nil {
 		return "", err
@@ -90,9 +95,9 @@ func Sha256(query string) (string, error) {
 	return got, nil
 }
 
-// LatestSha fetches the latest commit SHA from the GitHub API for the given
+// latestSha fetches the latest commit SHA from the GitHub API for the given
 // repository URL.
-func LatestSha(query string) (string, error) {
+func latestSha(query string) (string, error) {
 	client := &http.Client{}
 	request, err := http.NewRequest(http.MethodGet, query, nil)
 	if err != nil {
@@ -114,6 +119,23 @@ func LatestSha(query string) (string, error) {
 	return string(contents), nil
 }
 
+// LatestCommitAndChecksum fetches the latest commit SHA and the SHA256 of the tarball for that
+// commit from the GitHub API for the given repository.
+func LatestCommitAndChecksum(endpoints *Endpoints, repo *Repo) (commit, sha256 string, err error) {
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/commits/%s", endpoints.API, repo.Org, repo.Repo, branch)
+	commit, err = latestSha(apiURL)
+	if err != nil {
+		return "", "", err
+	}
+
+	tarballURL := TarballLink(endpoints.Download, repo, commit)
+	sha256, err = urlSha256(tarballURL)
+	if err != nil {
+		return "", "", err
+	}
+	return commit, sha256, nil
+}
+
 // TarballLink constructs a GitHub tarball download URL for the given
 // repository and commit SHA.
 func TarballLink(githubDownload string, repo *Repo, sha string) string {
@@ -122,10 +144,13 @@ func TarballLink(githubDownload string, repo *Repo, sha string) string {
 
 // DownloadTarball downloads a tarball from the given url to the target
 // path, verifying its SHA256 checksum matches expectedSha256. It retries up to
-// 3 times with exponential backoff on failure.
+// maxDownloadRetries times with exponential backoff on failure.
 func DownloadTarball(ctx context.Context, target, url, expectedSha256 string) error {
 	if fileExists(target) {
 		return nil
+	}
+	if expectedSha256 == "" {
+		return errMissingSHA256
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return err
@@ -146,7 +171,6 @@ func DownloadTarball(ctx context.Context, target, url, expectedSha256 string) er
 	if err := downloadTarball(ctx, tempPath, url); err != nil {
 		return err
 	}
-
 	sha, err := computeSHA256(tempPath)
 	if err != nil {
 		return err
@@ -161,10 +185,10 @@ func DownloadTarball(ctx context.Context, target, url, expectedSha256 string) er
 }
 
 // downloadTarball downloads a tarball from the given source URL to the target
-// path. It retries up to 3 times with exponential backoff on failure.
+// path. It retries up to maxDownloadRetries times with exponential backoff on failure.
 func downloadTarball(ctx context.Context, target, source string) error {
 	var err error
-	for i := range 3 {
+	for i := range maxDownloadRetries {
 		if i > 0 {
 			select {
 			case <-time.After(defaultBackoff):
@@ -174,16 +198,15 @@ func downloadTarball(ctx context.Context, target, source string) error {
 			}
 		}
 
-		if err := downloadAttempt(ctx, target, source); err != nil {
+		if err = downloadAttempt(ctx, target, source); err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return err
 			}
 			continue
 		}
 		return nil
-
 	}
-	return fmt.Errorf("download failed after 3 attempts, last error=%w", err)
+	return fmt.Errorf("download failed after %d attempts, last error=%w", maxDownloadRetries, err)
 }
 
 func downloadAttempt(ctx context.Context, target, source string) (err error) {
@@ -214,11 +237,9 @@ func downloadAttempt(ctx context.Context, target, source string) (err error) {
 	if response.StatusCode >= 300 {
 		return fmt.Errorf("http error in download %s", response.Status)
 	}
-
 	if _, err := io.Copy(file, response.Body); err != nil {
 		return err
 	}
-
 	return nil
 }
 

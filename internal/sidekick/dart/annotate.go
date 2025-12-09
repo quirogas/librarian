@@ -42,7 +42,7 @@ var defaultValues = map[api.Typez]struct {
 	api.BYTES_TYPE:    {"Uint8List(0)", false},
 	api.DOUBLE_TYPE:   {"0", true},
 	api.FIXED32_TYPE:  {"0", true},
-	api.FIXED64_TYPE:  {"0", true},
+	api.FIXED64_TYPE:  {"BigInt.zero", false},
 	api.FLOAT_TYPE:    {"0", true},
 	api.INT32_TYPE:    {"0", true},
 	api.INT64_TYPE:    {"0", true},
@@ -52,7 +52,7 @@ var defaultValues = map[api.Typez]struct {
 	api.SINT64_TYPE:   {"0", true},
 	api.STRING_TYPE:   {"''", true},
 	api.UINT32_TYPE:   {"0", true},
-	api.UINT64_TYPE:   {"0", true},
+	api.UINT64_TYPE:   {"BigInt.zero", false},
 }
 
 type modelAnnotations struct {
@@ -802,95 +802,86 @@ func (annotate *annotateModel) annotateField(field *api.Field) {
 	}
 }
 
-func (annotate *annotateModel) createFromJsonLine(field *api.Field, state *api.APIState, required bool) string {
-	message := state.MessageByID[field.TypezID]
+func (annotate *annotateModel) decoder(typez api.Typez, typeid string, state *api.APIState) string {
+	switch typez {
+	case api.INT64_TYPE,
+		api.SINT64_TYPE,
+		api.SFIXED64_TYPE:
+		return "decodeInt64"
+	case api.FIXED64_TYPE,
+		api.UINT64_TYPE:
+		return "decodeUint64"
+	case api.FLOAT_TYPE,
+		api.DOUBLE_TYPE:
+		return "decodeDouble"
+	case api.INT32_TYPE,
+		api.FIXED32_TYPE,
+		api.SFIXED32_TYPE,
+		api.SINT32_TYPE,
+		api.UINT32_TYPE:
+		return "decodeInt"
+	case api.BOOL_TYPE:
+		return "decodeBool"
+	case api.STRING_TYPE:
+		return "decodeString"
+	case api.BYTES_TYPE:
+		return "decodeBytes"
+	case api.ENUM_TYPE:
+		typeName := annotate.resolveEnumName(state.EnumByID[typeid])
+		return fmt.Sprintf("%s.fromJson", typeName)
+	case api.MESSAGE_TYPE:
+		typeName := annotate.resolveMessageName(state.MessageByID[typeid], true)
+		return fmt.Sprintf("%s.fromJson", typeName)
+	default:
+		panic("unknown type")
+	}
+}
 
+func (annotate *annotateModel) createFromJsonLine(field *api.Field, state *api.APIState, required bool) string {
 	data := fmt.Sprintf("json['%s']", field.JSONName)
 
-	bang := ""
+	defaultValue := "null"
 	if required {
 		switch {
 		case field.Repeated:
-			bang = " ?? []"
+			defaultValue = "[]"
 		case field.Map:
-			bang = " ?? {}"
+			defaultValue = "{}"
 		case field.Typez == api.ENUM_TYPE:
 			// 'ExecutableCode_Language.$default'
 			typeName := annotate.resolveEnumName(annotate.state.EnumByID[field.TypezID])
-			bang = fmt.Sprintf(" ?? %s.$default", typeName)
+			defaultValue = fmt.Sprintf("%s.$default", typeName)
 		default:
-			bang = fmt.Sprintf(" ?? %s", defaultValues[field.Typez].Value)
+			defaultValue = defaultValues[field.Typez].Value
 		}
 	}
 
 	switch {
+	// Value.NullValue is encoded as null in JSON so lists and map values must match on nullable objects.
 	case field.Repeated:
-		switch field.Typez {
-		case api.BYTES_TYPE:
-			return fmt.Sprintf("decodeListBytes(%s)%s", data, bang)
-		case api.ENUM_TYPE:
-			typeName := annotate.resolveEnumName(state.EnumByID[field.TypezID])
-			return fmt.Sprintf("decodeListEnum(%s, %s.fromJson)%s", data, typeName, bang)
-		case api.MESSAGE_TYPE:
-			_, hasCustomEncoding := usesCustomEncoding[field.TypezID]
-			typeName := annotate.resolveMessageName(state.MessageByID[field.TypezID], true)
-			if hasCustomEncoding {
-				return fmt.Sprintf("decodeListMessageCustom(%s, %s.fromJson)%s", data, typeName, bang)
-			} else {
-				return fmt.Sprintf("decodeListMessage(%s, %s.fromJson)%s", data, typeName, bang)
-			}
-		default:
-			return fmt.Sprintf("decodeList(%s)%s", data, bang)
-		}
+		decoder := annotate.decoder(field.Typez, field.TypezID, state)
+		return fmt.Sprintf(
+			"switch (%s) { null => %s, List<Object?> $1 => [for (final i in $1) %s(i)], "+
+				"_ => throw const FormatException('\"%s\" is not a list') }",
+			data, defaultValue, decoder, field.JSONName)
 	case field.Map:
-		valueField := message.Fields[1]
+		message := state.MessageByID[field.TypezID]
+		keyType := message.Fields[0].Typez
+		keyTypeID := message.Fields[0].TypezID
+		keyDecoder := annotate.decoder(keyType, keyTypeID, state)
+		valueType := message.Fields[1].Typez
+		valueTypeID := message.Fields[1].TypezID
+		valueDecoder := annotate.decoder(valueType, valueTypeID, state)
 
-		switch valueField.Typez {
-		case api.BYTES_TYPE:
-			return fmt.Sprintf("decodeMapBytes(%s)%s", data, bang)
-		case api.ENUM_TYPE:
-			typeName := annotate.resolveEnumName(state.EnumByID[valueField.TypezID])
-			return fmt.Sprintf("decodeMapEnum(%s, %s.fromJson)%s", data, typeName, bang)
-		case api.MESSAGE_TYPE:
-			_, hasCustomEncoding := usesCustomEncoding[valueField.TypezID]
-			typeName := annotate.resolveMessageName(state.MessageByID[valueField.TypezID], true)
-			if hasCustomEncoding {
-				return fmt.Sprintf("decodeMapMessageCustom(%s, %s.fromJson)%s", data, typeName, bang)
-			} else {
-				return fmt.Sprintf("decodeMapMessage(%s, %s.fromJson)%s", data, typeName, bang)
-			}
-		default:
-			return fmt.Sprintf("decodeMap(%s)%s", data, bang)
-		}
-	case field.Typez == api.INT64_TYPE ||
-		field.Typez == api.UINT64_TYPE || field.Typez == api.SINT64_TYPE ||
-		field.Typez == api.FIXED64_TYPE || field.Typez == api.SFIXED64_TYPE:
-		return fmt.Sprintf("decodeInt64(%s)%s", data, bang)
-	case field.Typez == api.FLOAT_TYPE || field.Typez == api.DOUBLE_TYPE:
-		return fmt.Sprintf("decodeDouble(%s)%s", data, bang)
-	case field.Typez == api.INT32_TYPE || field.Typez == api.FIXED32_TYPE ||
-		field.Typez == api.SFIXED32_TYPE || field.Typez == api.SINT32_TYPE ||
-		field.Typez == api.UINT32_TYPE ||
-		field.Typez == api.BOOL_TYPE ||
-		field.Typez == api.STRING_TYPE:
-		return fmt.Sprintf("%s%s", data, bang)
-	case field.Typez == api.BYTES_TYPE:
-		return fmt.Sprintf("decodeBytes(%s)%s", data, bang)
-	case field.Typez == api.ENUM_TYPE:
-		typeName := annotate.resolveEnumName(state.EnumByID[field.TypezID])
-		return fmt.Sprintf("decodeEnum(%s, %s.fromJson)%s", data, typeName, bang)
-	case field.Typez == api.MESSAGE_TYPE:
-		_, hasCustomEncoding := usesCustomEncoding[field.TypezID]
-		typeName := annotate.resolveMessageName(state.MessageByID[field.TypezID], true)
-		if hasCustomEncoding {
-			return fmt.Sprintf("decodeCustom(%s, %s.fromJson)", data, typeName)
-		} else {
-			return fmt.Sprintf("decode(%s, %s.fromJson)", data, typeName)
-		}
+		return fmt.Sprintf(
+			"switch (%s) { null => %s, Map<String, Object?> $1 => {for (final e in $1.entries) %s(e.key): %s(e.value)}, "+
+				"_ => throw const FormatException('\"%s\" is not an object') }",
+			data, defaultValue, keyDecoder, valueDecoder, field.JSONName)
 	}
 
+	decoder := annotate.decoder(field.Typez, field.TypezID, state)
 	// No decoding necessary.
-	return data
+	return fmt.Sprintf("switch (%s) { null => %s, Object $1 => %s($1)}", data, defaultValue, decoder)
 }
 
 func createToJsonLine(field *api.Field, state *api.APIState, required bool) string {
@@ -932,10 +923,11 @@ func createToJsonLine(field *api.Field, state *api.APIState, required bool) stri
 		return fmt.Sprintf("%s%s.toJson()", name, bang)
 	case field.Typez == api.BYTES_TYPE:
 		return fmt.Sprintf("encodeBytes(%s)", name)
-	case field.Typez == api.INT64_TYPE ||
-		field.Typez == api.UINT64_TYPE || field.Typez == api.SINT64_TYPE ||
-		field.Typez == api.FIXED64_TYPE || field.Typez == api.SFIXED64_TYPE:
+	case field.Typez == api.INT64_TYPE || field.Typez == api.SINT64_TYPE ||
+		field.Typez == api.SFIXED64_TYPE:
 		return fmt.Sprintf("encodeInt64(%s)", name)
+	case field.Typez == api.FIXED64_TYPE || field.Typez == api.UINT64_TYPE:
+		return fmt.Sprintf("encodeUint64(%s)", name)
 	case field.Typez == api.FLOAT_TYPE || field.Typez == api.DOUBLE_TYPE:
 		return fmt.Sprintf("encodeDouble(%s)", name)
 	default:
@@ -1074,9 +1066,10 @@ func (annotate *annotateModel) fieldType(f *api.Field) string {
 	case api.INT32_TYPE, api.UINT32_TYPE, api.SINT32_TYPE,
 		api.FIXED32_TYPE, api.SFIXED32_TYPE:
 		out = "int"
-	case api.INT64_TYPE, api.UINT64_TYPE, api.SINT64_TYPE,
-		api.FIXED64_TYPE, api.SFIXED64_TYPE:
+	case api.INT64_TYPE, api.SINT64_TYPE, api.SFIXED64_TYPE:
 		out = "int"
+	case api.FIXED64_TYPE, api.UINT64_TYPE:
+		out = "BigInt"
 	case api.FLOAT_TYPE, api.DOUBLE_TYPE:
 		out = "double"
 	case api.STRING_TYPE:

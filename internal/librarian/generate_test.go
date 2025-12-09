@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/googleapis/librarian/internal/config"
 )
 
 func TestGenerateCommand(t *testing.T) {
@@ -215,6 +216,80 @@ libraries:
 	}
 }
 
+func TestPrepareLibrary(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		language string
+		output   string
+		veneer   bool
+		channels []*config.Channel
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "empty output derives path from channel",
+			language: "rust",
+			channels: []*config.Channel{{Path: "google/cloud/secretmanager/v1"}},
+			want:     "src/generated/cloud/secretmanager/v1",
+		},
+		{
+			name:     "explicit output keeps explicit path",
+			language: "rust",
+			output:   "custom/output",
+			channels: []*config.Channel{{Path: "google/cloud/secretmanager/v1"}},
+			want:     "custom/output",
+		},
+		{
+			name:     "empty output uses default for non-rust",
+			language: "go",
+			channels: []*config.Channel{{Path: "google/cloud/secretmanager/v1"}},
+			want:     "src/generated",
+		},
+		{
+			name:     "rust with no channels returns error",
+			language: "rust",
+			channels: nil,
+			wantErr:  true,
+		},
+		{
+			name:    "veneer without output returns error",
+			veneer:  true,
+			wantErr: true,
+		},
+		{
+			name:   "veneer with explicit output succeeds",
+			veneer: true,
+			output: "src/storage",
+			want:   "src/storage",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lib := &config.Library{
+				Name:     "test-lib",
+				Output:   test.output,
+				Veneer:   test.veneer,
+				Channels: test.channels,
+			}
+			defaults := &config.Default{
+				Output: "src/generated",
+			}
+			got, err := prepareLibrary(test.language, lib, defaults)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Output != test.want {
+				t.Errorf("got output %q, want %q", got.Output, test.want)
+			}
+		})
+	}
+}
+
 func TestCleanOutput(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -299,5 +374,69 @@ func TestCleanOutput(t *testing.T) {
 				t.Errorf("got %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestDeriveDefaultLibrariesSkipsConfigured(t *testing.T) {
+	cfg := &config.Config{
+		Language: "rust",
+		Default:  &config.Default{Output: t.TempDir()},
+		Libraries: []*config.Library{{
+			Name:     "secretmanager",
+			Channels: []*config.Channel{{Path: "google/cloud/secretmanager/v1"}},
+		}},
+	}
+	derived, err := deriveDefaultLibraries(cfg, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(derived) != 0 {
+		t.Errorf("got %d derived libraries, want 0", len(derived))
+	}
+}
+
+func TestDeriveDefaultLibrariesWithOutputDir(t *testing.T) {
+	outputDir := t.TempDir()
+	googleapisDir := t.TempDir()
+
+	writeServiceConfig(t, googleapisDir, "google/cloud/speech/v2", "speech_v2.yaml")
+	if err := os.MkdirAll(filepath.Join(outputDir, "cloud/speech/v2"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Language: "rust",
+		Default:  &config.Default{Output: outputDir},
+	}
+	derived, err := deriveDefaultLibraries(cfg, googleapisDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(derived) != 1 {
+		t.Fatalf("got %d derived libraries, want 1", len(derived))
+	}
+
+	want := &config.Library{
+		Name:   "google-cloud-speech-v2",
+		Output: filepath.Join(outputDir, "cloud/speech/v2"),
+		Channels: []*config.Channel{{
+			Path:          "google/cloud/speech/v2",
+			ServiceConfig: "google/cloud/speech/v2/speech_v2.yaml",
+		}},
+	}
+	if diff := cmp.Diff(want, derived[0]); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func writeServiceConfig(t *testing.T, googleapisDir, channel, filename string) {
+	t.Helper()
+	dir := filepath.Join(googleapisDir, channel)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "type: google.api.Service\nname: test.googleapis.com\n"
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 }

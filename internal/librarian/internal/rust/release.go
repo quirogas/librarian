@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/googleapis/librarian/internal/config"
+	"github.com/googleapis/librarian/internal/semver"
 	rustrelease "github.com/googleapis/librarian/internal/sidekick/rust_release"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -82,7 +83,9 @@ func release(cfg *config.Config, name string) (*config.Config, error) {
 		}
 
 		found = true
-		newVersion, err := rustrelease.BumpPackageVersion(manifest.Package.Version)
+		// Only ever take a minor version bump.
+		// TODO(https://github.com/googleapis/librarian/issues/3182): Implement desired pre-1.0.0 semantics.
+		newVersion, err := semver.DeriveNextOptions{BumpVersionCore: true}.DeriveNext(semver.Minor, manifest.Package.Version)
 		if err != nil {
 			return err
 		}
