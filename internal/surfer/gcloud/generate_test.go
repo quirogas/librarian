@@ -66,7 +66,7 @@ func TestGetVerb(t *testing.T) {
 		{"Empty", "", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got := getVerb(test.methodName)
+			got, _ := getVerb(test.methodName)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
@@ -81,9 +81,9 @@ func TestGetPluralFromSegments(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "Standard",
+			name:     "Standard",
 			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
-			want: "instances",
+			want:     "instances",
 		},
 		{
 			name:     "Short",
@@ -117,9 +117,9 @@ func TestGetSingularFromSegments(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "Standard",
+			name:     "Standard",
 			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
-			want: "instance",
+			want:     "instance",
 		},
 		{
 			name:     "Short",
@@ -153,9 +153,9 @@ func TestGetCollectionPathFromSegments(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "Standard",
+			name:     "Standard",
 			segments: []api.PathSegment{lit("projects"), variable("project"), lit("locations"), variable("location"), lit("instances"), variable("instance")},
-			want: "projects.locations.instances",
+			want:     "projects.locations.instances",
 		},
 		{
 			name:     "Short",
@@ -168,14 +168,14 @@ func TestGetCollectionPathFromSegments(t *testing.T) {
 			want:     "projects",
 		},
 		{
-			name: "Mixed",
+			name:     "Mixed",
 			segments: []api.PathSegment{lit("organizations"), variable("organization"), lit("locations"), variable("location"), lit("clusters"), variable("cluster")},
-			want: "organizations.locations.clusters",
+			want:     "organizations.locations.clusters",
 		},
 		{
-			name: "Global",
+			name:     "Global",
 			segments: []api.PathSegment{lit("projects"), variable("project"), lit("global"), lit("networks"), variable("network")},
-			want: "projects.networks",
+			want:     "projects.networks",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -186,3 +186,4 @@ func TestGetCollectionPathFromSegments(t *testing.T) {
 		})
 	}
 }
+
