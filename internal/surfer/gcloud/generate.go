@@ -393,8 +393,8 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// We first need to get the full resource definition for the method.
 	resource := getResourceForMethod(method, model)
 	var segments []api.PathSegment
-	if resource != nil && len(resource.Pattern) > 0 {
-		segments = resource.Pattern[0]
+	if resource != nil && len(resource.Patterns) > 0 {
+		segments = resource.Patterns[0]
 	}
 
 	// We construct the gcloud collection path from the resource's pattern string.
@@ -440,11 +440,10 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Confi
 	// one that matches the type of our resource reference.
 	for _, def := range model.ResourceDefinitions {
 		if def.Type == field.ResourceReference.Type {
-			if len(def.Pattern) == 0 {
-				return nil // We cannot proceed without a pattern.
-			}
-			segments := def.Pattern[0]
-
+			            if len(def.Patterns) == 0 {
+			                return nil // We cannot proceed without a pattern.
+			            }
+			            segments := def.Patterns[0]
 			// We determine the plural name, using the explicit `plural` field if available,
 			// and falling back to parsing the pattern otherwise.
 			pluralName := def.Plural
@@ -634,8 +633,8 @@ func getPluralResourceNameForMethod(method *api.Method, model *api.API) string {
 		}
 		// If the `plural` field is not present, we fall back to inferring the
 		// plural name from the resource's pattern string, as per AIP-122.
-		if len(resource.Pattern) > 0 {
-			return getPluralFromSegments(resource.Pattern[0])
+		if len(resource.Patterns) > 0 {
+			return getPluralFromSegments(resource.Patterns[0])
 		}
 	}
 	return ""
