@@ -21,6 +21,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/googleapis/librarian/internal/config"
 	"github.com/googleapis/librarian/internal/fetch"
@@ -38,6 +39,20 @@ var (
 	errBothLibraryAndAllFlag   = errors.New("cannot specify both library name and --all flag")
 	errEmptySources            = errors.New("sources field is required in librarian.yaml: specify googleapis and/or discovery source commits")
 )
+
+// Generator interface used for mocking in tests.
+type Generator interface {
+	Run(ctx context.Context, all bool, libraryName string) error
+}
+
+// Generate struct implements Generator interface.
+type Generate struct {
+}
+
+// Run encaspulates runGenerate command on Genrator interface.
+func (g *Generate) Run(ctx context.Context, all bool, libraryName string) error {
+	return runGenerate(ctx, all, libraryName)
+}
 
 func generateCommand() *cli.Command {
 	return &cli.Command{
@@ -168,6 +183,35 @@ func defaultOutput(language, channel, defaultOut string) string {
 	}
 }
 
+func deriveChannelPath(language string, lib *config.Library) string {
+	switch language {
+	case "rust":
+		return rust.DeriveChannelPath(lib.Name)
+	default:
+		return strings.ReplaceAll(lib.Name, "-", "/")
+	}
+}
+
+// deriveServiceConfig returns the conventionally derived service config path for a given channel.
+//
+// The final service config path is constructed using the pattern: "[resolved_path]/[service_name]_[version].yaml".
+//
+// For example, if resolved_path is "google/cloud/speech/v1", it derives to "google/cloud/speech/v1/speech_v1.yaml".
+//
+// It returns an empty string if the resolved path does not contain sufficient components
+// (e.g., missing version or service name) or if the version component does not start with 'v'.
+func deriveServiceConfig(resolvedPath string) string {
+	parts := strings.Split(resolvedPath, "/")
+	if len(parts) >= 2 {
+		version := parts[len(parts)-1]
+		service := parts[len(parts)-2]
+		if strings.HasPrefix(version, "v") {
+			return fmt.Sprintf("%s/%s_%s.yaml", resolvedPath, service, version)
+		}
+	}
+	return ""
+}
+
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -210,12 +254,27 @@ func generateLibrary(ctx context.Context, cfg *config.Config, libraryName string
 // For Rust libraries without an explicit output path, it derives the output
 // from the first channel path.
 func prepareLibrary(language string, lib *config.Library, defaults *config.Default) (*config.Library, error) {
+	if len(lib.Channels) == 0 {
+		// If no channels are specified, create an empty channel first
+		lib.Channels = append(lib.Channels, &config.Channel{})
+	}
+
+	// The googleapis path of a veneer library lives in language-specific configurations,
+	// so we only need to derive the path and service config for non-veneer libraries.
+	if !lib.Veneer {
+		for _, ch := range lib.Channels {
+			if ch.Path == "" {
+				ch.Path = deriveChannelPath(language, lib)
+			}
+			if ch.ServiceConfig == "" {
+				ch.ServiceConfig = deriveServiceConfig(ch.Path)
+			}
+		}
+	}
+
 	if lib.Output == "" {
 		if lib.Veneer {
 			return nil, fmt.Errorf("veneer %q requires an explicit output path", lib.Name)
-		}
-		if len(lib.Channels) == 0 {
-			return nil, fmt.Errorf("library %q has no channels, cannot determine default output", lib.Name)
 		}
 		lib.Output = defaultOutput(language, lib.Channels[0].Path, defaults.Output)
 	}
@@ -294,7 +353,15 @@ func cleanOutput(dir string, keep []string) error {
 		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("%s: file %q in keep list does not exist", dir, k)
 		}
-		keepSet[k] = true
+		// Effectively get a canonical relative path. While in most cases
+		// this will be equal to k, it might not be - in particular,
+		// on Windows the directory separator in paths returned by Rel
+		// will be a backslash.
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		keepSet[rel] = true
 	}
 	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

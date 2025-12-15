@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -50,6 +51,36 @@ var (
 
 	fetchSource = fetchGoogleapis
 )
+
+// RepoConfig represents the .librarian/generator-input/repo-config.yaml file in google-cloud-go repository.
+type RepoConfig struct {
+	Modules []*RepoConfigModule `yaml:"modules"`
+}
+
+// RepoConfigModule represents a module in repo-config.yaml.
+type RepoConfigModule struct {
+	Name                        string           `yaml:"name"`
+	ModulePathVersion           string           `yaml:"module_path_version,omitempty"`
+	DeleteGenerationOutputPaths []string         `yaml:"delete_generation_output_paths,omitempty"`
+	APIs                        []*RepoConfigAPI `yaml:"apis,omitempty"`
+}
+
+// RepoConfigAPI represents an API in repo-config.yaml.
+type RepoConfigAPI struct {
+	Path            string   `yaml:"path"`
+	ClientDirectory string   `yaml:"client_directory,omitempty"`
+	DisableGAPIC    bool     `yaml:"disable_gapic,omitempty"`
+	NestedProtos    []string `yaml:"nested_protos,omitempty"`
+	ProtoPackage    string   `yaml:"proto_package,omitempty"`
+}
+
+// MigrationInput holds all intermediate configuration and state necessary for migration from legacy files.
+type MigrationInput struct {
+	librarianState  *legacyconfig.LibrarianState
+	librarianConfig *legacyconfig.LibrarianConfig
+	repoConfig      *RepoConfig
+	lang            string
+}
 
 func main() {
 	ctx := context.Background()
@@ -84,7 +115,18 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	cfg, err := buildConfig(ctx, librarianState, librarianConfig, language)
+	repoConfig, err := readRepoConfig(repoPath)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := buildConfig(ctx, &MigrationInput{
+		librarianState:  librarianState,
+		librarianConfig: librarianConfig,
+		repoConfig:      repoConfig,
+		lang:            language,
+	})
+
 	if err != nil {
 		return err
 	}
@@ -114,11 +156,9 @@ func deriveLanguage(repoPath string) (string, error) {
 
 func buildConfig(
 	ctx context.Context,
-	librarianState *legacyconfig.LibrarianState,
-	librarianConfig *legacyconfig.LibrarianConfig,
-	lang string) (*config.Config, error) {
+	input *MigrationInput) (*config.Config, error) {
 	repo := "googleapis/google-cloud-go"
-	if lang == "python" {
+	if input.lang == "python" {
 		repo = "googleapis/google-cloud-python"
 	}
 
@@ -128,7 +168,7 @@ func buildConfig(
 	}
 
 	cfg := &config.Config{
-		Language: lang,
+		Language: input.lang,
 		Repo:     repo,
 		Sources: &config.Sources{
 			Googleapis: src,
@@ -138,7 +178,7 @@ func buildConfig(
 		},
 	}
 
-	cfg.Libraries = buildLibraries(librarianState, librarianConfig)
+	cfg.Libraries = buildLibraries(input)
 
 	return cfg, nil
 }
@@ -169,20 +209,28 @@ func fetchGoogleapis(ctx context.Context) (*config.Source, error) {
 	}, nil
 }
 
-func buildLibraries(
-	librarianState *legacyconfig.LibrarianState,
-	librarianConfig *legacyconfig.LibrarianConfig) []*config.Library {
+func buildLibraries(input *MigrationInput) []*config.Library {
 	var libraries []*config.Library
 	idToLibraryState := sliceToMap[legacyconfig.LibraryState](
-		librarianState.Libraries,
+		input.librarianState.Libraries,
 		func(lib *legacyconfig.LibraryState) string {
 			return lib.ID
 		})
+
 	idToLibraryConfig := sliceToMap[legacyconfig.LibraryConfig](
-		librarianConfig.Libraries,
+		input.librarianConfig.Libraries,
 		func(lib *legacyconfig.LibraryConfig) string {
 			return lib.LibraryID
 		})
+
+	idToGoModule := make(map[string]*RepoConfigModule)
+	if input.repoConfig != nil {
+		idToGoModule = sliceToMap[RepoConfigModule](
+			input.repoConfig.Modules,
+			func(mod *RepoConfigModule) string {
+				return mod.Name
+			})
+	}
 
 	// Iterate libraries from idToLibraryState because librarianConfig.Libraries is a
 	// subset of librarianState.Libraries.
@@ -199,6 +247,30 @@ func buildLibraries(
 		if ok {
 			library.SkipGenerate = libCfg.GenerateBlocked
 			library.SkipRelease = libCfg.ReleaseBlocked
+		}
+
+		libGoModule, ok := idToGoModule[id]
+		if ok {
+			var goAPIs []*config.GoAPI
+			for _, api := range libGoModule.APIs {
+				goAPIs = append(goAPIs, &config.GoAPI{
+					Path:            api.Path,
+					ClientDirectory: api.ClientDirectory,
+					DisableGAPIC:    api.DisableGAPIC,
+					NestedProtos:    api.NestedProtos,
+					ProtoPackage:    api.ProtoPackage,
+				})
+			}
+
+			goModule := &config.GoModule{
+				DeleteGenerationOutputPaths: libGoModule.DeleteGenerationOutputPaths,
+				GoAPIs:                      goAPIs,
+				ModulePathVersion:           libGoModule.ModulePathVersion,
+			}
+
+			if !isEmptyGoModule(goModule) {
+				library.Go = goModule
+			}
 		}
 
 		libraries = append(libraries, library)
@@ -232,6 +304,10 @@ func toChannels(apis []*legacyconfig.API) []*config.Channel {
 	return channels
 }
 
+func isEmptyGoModule(mod *config.GoModule) bool {
+	return reflect.DeepEqual(mod, &config.GoModule{})
+}
+
 func readState(path string) (*legacyconfig.LibrarianState, error) {
 	stateFile := filepath.Join(path, librarianDir, librarianStateFile)
 	return yaml.Read[legacyconfig.LibrarianState](stateFile)
@@ -240,4 +316,16 @@ func readState(path string) (*legacyconfig.LibrarianState, error) {
 func readConfig(path string) (*legacyconfig.LibrarianConfig, error) {
 	configFile := filepath.Join(path, librarianDir, librarianConfigFile)
 	return yaml.Read[legacyconfig.LibrarianConfig](configFile)
+}
+
+func readRepoConfig(path string) (*RepoConfig, error) {
+	configFile := filepath.Join(path, librarianDir, "generator-input/repo-config.yaml")
+	if _, err := os.Stat(configFile); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return yaml.Read[RepoConfig](configFile)
 }

@@ -14,6 +14,22 @@
 
 package config
 
+// GoModule represents the Go-specific configuration for a library.
+type GoModule struct {
+	DeleteGenerationOutputPaths []string `yaml:"delete_generation_output_paths,omitempty"`
+	GoAPIs                      []*GoAPI `yaml:"go_apis,omitempty"`
+	ModulePathVersion           string   `yaml:"module_path_version,omitempty"`
+}
+
+// GoAPI represents configuration for a single API channel within a Go module.
+type GoAPI struct {
+	Path            string   `yaml:"path,omitempty"`
+	ClientDirectory string   `yaml:"client_directory,omitempty"`
+	DisableGAPIC    bool     `yaml:"disable_gapic,omitempty"`
+	NestedProtos    []string `yaml:"nested_protos,omitempty"`
+	ProtoPackage    string   `yaml:"proto_package,omitempty"`
+}
+
 // RustDefault contains Rust-specific default configuration.
 type RustDefault struct {
 	// PackageDependencies is a list of default package dependencies.
@@ -27,6 +43,9 @@ type RustDefault struct {
 // Each module specifies what proto source to use, which template to apply,
 // and where to output the generated code.
 type RustModule struct {
+	// GenerateSetterSamples indicates whether to generate setter samples.
+	GenerateSetterSamples bool `yaml:"generate_setter_samples,omitempty"`
+
 	// HasVeneer indicates whether this module has a hand-written wrapper.
 	HasVeneer bool `yaml:"has_veneer,omitempty"`
 
@@ -68,6 +87,9 @@ type RustModule struct {
 	// Template specifies which generator template to use.
 	// Valid values: "grpc-client", "http-client", "prost", "convert-prost", "mod".
 	Template string `yaml:"template"`
+
+	// TitleOverride overrides the crate title.
+	TitleOverride string `yaml:"title_override,omitempty"`
 }
 
 // RustCrate contains Rust-specific library configuration.
@@ -126,6 +148,9 @@ type RustCrate struct {
 
 	// GenerateSetterSamples indicates whether to generate setter samples.
 	GenerateSetterSamples bool `yaml:"generate_setter_samples,omitempty"`
+
+	// GenerateRpcSamples indicates whether to generate RPC samples.
+	GenerateRpcSamples bool `yaml:"generate_rpc_samples,omitempty"`
 
 	// PostProcessProtos indicates whether to post-process protos.
 	PostProcessProtos string `yaml:"post_process_protos,omitempty"`

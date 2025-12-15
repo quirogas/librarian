@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -34,16 +35,17 @@ import (
 
 const (
 	sidekickFile            = ".sidekick.toml"
+	cargoFile               = "Cargo.toml"
 	discoveryArchivePrefix  = "https://github.com/googleapis/discovery-artifact-manager/archive/"
 	googleapisArchivePrefix = "https://github.com/googleapis/googleapis/archive/"
 	tarballSuffix           = ".tar.gz"
 )
 
 var (
-	errRepoNotFound     = errors.New("repo path argument is required")
-	errSidekickNotFound = errors.New(".sidekick.toml not found")
-	errSrcNotFound      = errors.New("src/generated directory not found")
-	errTidyFailed       = errors.New("librarian tidy failed")
+	errRepoNotFound                = errors.New("-repo flag is required")
+	errSidekickNotFound            = errors.New(".sidekick.toml not found")
+	errTidyFailed                  = errors.New("librarian tidy failed")
+	errUnableToCalculateOutputPath = errors.New("unable to calculate output path")
 )
 
 // SidekickConfig represents the structure of a .sidekick.toml file.
@@ -94,32 +96,43 @@ func run(args []string) error {
 	}
 	repoPath := flagSet.Arg(0)
 
-	slog.Info("Reading sidekick.toml...", "path", repoPath)
-
 	// Read root .sidekick.toml for defaults
 	defaults, err := readRootSidekick(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to read root .sidekick.toml: %w", err)
 	}
 
-	// Find all .sidekick.toml files
-	sidekickFiles, err := findSidekickFiles(repoPath)
+	// Find all .sidekick.toml files for GAPIC libraries.
+	sidekickFiles, err := findSidekickFiles(filepath.Join(repoPath, "src", "generated"))
 	if err != nil {
 		return fmt.Errorf("failed to find sidekick.toml files: %w", err)
 	}
 
-	// Read all sidekick.toml files
-	libraries, err := readSidekickFiles(sidekickFiles)
+	libraries, err := buildGAPIC(sidekickFiles, repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to read sidekick.toml files: %w", err)
 	}
 
-	cfg := buildConfig(libraries, defaults)
+	cargoFiles, err := findCargos(filepath.Join(repoPath, "src"))
+	if err != nil {
+		return fmt.Errorf("failed to find Cargo.toml files: %w", err)
+	}
+
+	veneers, err := buildVeneer(cargoFiles)
+	if err != nil {
+		return fmt.Errorf("failed to build veneers: %w", err)
+	}
+
+	allLibraries := make(map[string]*config.Library, len(libraries)+len(veneers))
+	maps.Copy(allLibraries, libraries)
+	maps.Copy(allLibraries, veneers)
+
+	cfg := buildConfig(allLibraries, defaults)
 
 	if err := yaml.Write(*outputPath, cfg); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
-	slog.Info("Wrote config to output file", "path", outputPath)
+	slog.Info("Wrote config to output file", "path", *outputPath)
 
 	if err := librarian.RunTidy(); err != nil {
 		slog.Error(errTidyFailed.Error(), "error", err)
@@ -215,16 +228,14 @@ func parsePackageDependency(name, spec string) *config.RustPackageDependency {
 	return dep
 }
 
-// findSidekickFiles finds all .sidekick.toml files in the repository.
-func findSidekickFiles(repoPath string) ([]string, error) {
+// findSidekickFiles finds all .sidekick.toml files within the given path.
+func findSidekickFiles(path string) ([]string, error) {
 	var files []string
-
-	generatedPath := filepath.Join(repoPath, "src", "generated")
-	err := filepath.Walk(generatedPath, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return errSrcNotFound
+			return err
 		}
-		if !info.IsDir() && info.Name() == sidekickFile {
+		if !d.IsDir() && d.Name() == sidekickFile {
 			files = append(files, path)
 		}
 		return nil
@@ -241,8 +252,7 @@ func findSidekickFiles(repoPath string) ([]string, error) {
 	return files, nil
 }
 
-// readSidekickFiles reads all sidekick.toml files and extracts library information.
-func readSidekickFiles(files []string) (map[string]*config.Library, error) {
+func buildGAPIC(files []string, repoPath string) (map[string]*config.Library, error) {
 	libraries := make(map[string]*config.Library)
 
 	for _, file := range files {
@@ -271,15 +281,9 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 
 		// Read Cargo.toml in the same directory to get the actual library name
 		dir := filepath.Dir(file)
-		cargoPath := filepath.Join(dir, "Cargo.toml")
-		cargoData, err := os.ReadFile(cargoPath)
+		cargo, err := readTOML[CargoConfig](filepath.Join(dir, cargoFile))
 		if err != nil {
-			return nil, fmt.Errorf("failed to read %s: %w", cargoPath, err)
-		}
-
-		var cargo CargoConfig
-		if err := toml.Unmarshal(cargoData, &cargo); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal %s: %w", cargoPath, err)
+			return nil, fmt.Errorf("failed to read cargo: %w", err)
 		}
 
 		libraryName := cargo.Package.Name
@@ -296,6 +300,11 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 			libraries[libraryName] = lib
 		}
 		lib.SpecificationFormat = specificationFormat
+		relativePath, err := filepath.Rel(repoPath, dir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate relative path: %w", errUnableToCalculateOutputPath)
+		}
+		lib.Output = relativePath
 
 		// Add channels
 		lib.Channels = append(lib.Channels, &config.Channel{
@@ -320,7 +329,16 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 			lib.CopyrightYear = copyrightYear
 		}
 
-		// Parse Rust-specific configuration from sidekick.toml source section
+		if extraModules, ok := sidekick.Codec["extra-modules"].(string); ok {
+			for _, module := range strToSlice(extraModules) {
+				if module == "" {
+					continue
+				}
+				lib.Keep = append(lib.Keep, fmt.Sprintf("src/%s.rs", module))
+			}
+		}
+
+		// Parse Rust-specific configuration from .sidekick.toml source section
 		if descriptionOverride, ok := sidekick.Source["description-override"].(string); ok {
 			lib.DescriptionOverride = descriptionOverride
 		}
@@ -344,6 +362,7 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 		routingRequired, _ := sidekick.Codec["routing-required"].(string)
 		includeGrpcOnlyMethods, _ := sidekick.Codec["include-grpc-only-methods"].(string)
 		generateSetterSamples, _ := sidekick.Codec["generate-setter-samples"].(string)
+		generateRpcSamples, _ := sidekick.Codec["generate-rpc-samples"].(string)
 		postProcessProtos, _ := sidekick.Codec["post-process-protos"].(string)
 		detailedTracingAttributes, _ := sidekick.Codec["detailed-tracing-attributes"].(string)
 		nameOverrides, _ := sidekick.Codec["name-overrides"].(string)
@@ -392,6 +411,7 @@ func readSidekickFiles(files []string) (map[string]*config.Library, error) {
 			RoutingRequired:           strToBool(routingRequired),
 			IncludeGrpcOnlyMethods:    strToBool(includeGrpcOnlyMethods),
 			GenerateSetterSamples:     strToBool(generateSetterSamples),
+			GenerateRpcSamples:        strToBool(generateRpcSamples),
 			PostProcessProtos:         postProcessProtos,
 			DetailedTracingAttributes: strToBool(detailedTracingAttributes),
 			DocumentationOverrides:    documentationOverrides,
@@ -419,6 +439,118 @@ func deriveLibraryName(apiPath string) string {
 	return "google-cloud-" + strings.ReplaceAll(trimmedPath, "/", "-")
 }
 
+// findCargos returns all Cargo.toml files within the given path.
+//
+// A file is filtered if the file lives in a path that contains src/generated.
+func findCargos(path string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() && strings.Contains(path, "src/generated") {
+			return filepath.SkipDir
+		}
+
+		if d.IsDir() || d.Name() != cargoFile {
+			return nil
+		}
+
+		files = append(files, path)
+
+		return nil
+	})
+	return files, err
+}
+
+func buildVeneer(files []string) (map[string]*config.Library, error) {
+	veneers := make(map[string]*config.Library)
+	for _, file := range files {
+		cargo, err := readTOML[CargoConfig](file)
+		if err != nil {
+			return nil, err
+		}
+		dir := filepath.Dir(file)
+		rustModules, err := buildModules(dir)
+		if err != nil {
+			return nil, err
+		}
+		name := cargo.Package.Name
+		veneers[name] = &config.Library{
+			Name:          name,
+			Veneer:        true,
+			Output:        dir,
+			Version:       cargo.Package.Version,
+			CopyrightYear: "2025",
+		}
+		if rustModules != nil {
+			veneers[name].Rust = &config.RustCrate{
+				Modules: rustModules,
+			}
+		}
+	}
+
+	return veneers, nil
+}
+
+func buildModules(path string) ([]*config.RustModule, error) {
+	var modules []*config.RustModule
+	err := filepath.WalkDir(path, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() || d.Name() != sidekickFile {
+			return nil
+		}
+
+		sidekick, err := readTOML[SidekickConfig](path)
+		if err != nil {
+			return err
+		}
+
+		includedIds, _ := sidekick.Source["included-ids"].(string)
+		includeList, _ := sidekick.Source["include-list"].(string)
+		skippedIds, _ := sidekick.Source["skipped-ids"].(string)
+		titleOverride, _ := sidekick.Source["title-override"].(string)
+
+		hasVeneer, _ := sidekick.Codec["has-veneer"].(string)
+		includeGrpcOnlyMethods, _ := sidekick.Codec["include-grpc-only-methods"].(string)
+		routingRequired, _ := sidekick.Codec["routing-required"].(string)
+		modulePath, _ := sidekick.Codec["module-path"].(string)
+		nameOverrides, _ := sidekick.Codec["name-overrides"].(string)
+		postProcessProtos, _ := sidekick.Codec["post-process-protos"].(string)
+		templateOverride, _ := sidekick.Codec["template-override"].(string)
+		generateSetterSamples, ok := sidekick.Codec["generate-setter-samples"].(string)
+		if !ok {
+			generateSetterSamples = "true"
+		}
+
+		modules = append(modules, &config.RustModule{
+			GenerateSetterSamples:  strToBool(generateSetterSamples),
+			HasVeneer:              strToBool(hasVeneer),
+			IncludedIds:            strToSlice(includedIds),
+			IncludeGrpcOnlyMethods: strToBool(includeGrpcOnlyMethods),
+			IncludeList:            includeList,
+			ModulePath:             modulePath,
+			NameOverrides:          nameOverrides,
+			Output:                 filepath.Dir(path),
+			PostProcessProtos:      postProcessProtos,
+			RoutingRequired:        strToBool(routingRequired),
+			ServiceConfig:          sidekick.General.ServiceConfig,
+			SkippedIds:             strToSlice(skippedIds),
+			Source:                 sidekick.General.SpecificationSource,
+			Template:               strings.TrimPrefix(templateOverride, "templates/"),
+			TitleOverride:          titleOverride,
+		})
+
+		return nil
+	})
+
+	return modules, err
+}
+
 // buildConfig builds the complete config from libraries.
 func buildConfig(libraries map[string]*config.Library, defaults *config.Config) *config.Config {
 	cfg := defaults
@@ -438,8 +570,9 @@ func buildConfig(libraries map[string]*config.Library, defaults *config.Config) 
 		// Check if library has extra configuration beyond just name/api/version
 		hasExtraConfig := lib.CopyrightYear != "" ||
 			(lib.Rust != nil && (lib.Rust.PerServiceFeatures || len(lib.Rust.DisabledRustdocWarnings) > 0 ||
-				len(lib.Rust.PackageDependencies) > 0 || lib.Rust.GenerateSetterSamples ||
-				len(lib.Rust.PaginationOverrides) > 0 || lib.Rust.NameOverrides != ""))
+				lib.Rust.GenerateSetterSamples || lib.Rust.GenerateRpcSamples ||
+				len(lib.Rust.PackageDependencies) > 0 || len(lib.Rust.PaginationOverrides) > 0 ||
+				lib.Rust.NameOverrides != ""))
 		// Only include in libraries section if:
 		// 1. Name doesn't match expected naming convention (name override)
 		// 2. Library has extra configuration
@@ -500,4 +633,18 @@ func strToSlice(s string) []string {
 
 func isEmptyRustCrate(r *config.RustCrate) bool {
 	return reflect.DeepEqual(r, &config.RustCrate{})
+}
+
+func readTOML[T any](file string) (*T, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", file, err)
+	}
+
+	var tomlData T
+	if err := toml.Unmarshal(data, &tomlData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal %s: %w", file, err)
+	}
+
+	return &tomlData, nil
 }

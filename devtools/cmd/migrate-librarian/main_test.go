@@ -44,7 +44,7 @@ func TestRunMigrateLibrarian(t *testing.T) {
 		},
 		{
 			name:     "tidy_failed",
-			repoPath: "testdata/run/tidy-fails-go",
+			repoPath: "testdata/run/tidy-fails-python",
 			wantErr:  errTidyFailed,
 		},
 		{
@@ -310,7 +310,12 @@ func TestBuildConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := t.Context()
 			fetchSource = test.fetchSource
-			got, err := buildConfig(ctx, test.state, test.cfg, test.lang)
+			input := &MigrationInput{
+				librarianState:  test.state,
+				librarianConfig: test.cfg,
+				lang:            test.lang,
+			}
+			got, err := buildConfig(ctx, input)
 			if test.wantErr != nil {
 				if !errors.Is(err, test.wantErr) {
 					t.Errorf("expected error containing %q, got: %v", test.wantErr, err)
@@ -321,6 +326,203 @@ func TestBuildConfig(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 				return
+			}
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBuildLibraries(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		input *MigrationInput
+		want  []*config.Library
+	}{
+		{
+			name: "sorted_libraries",
+			input: &MigrationInput{
+				librarianState: &legacyconfig.LibrarianState{
+					Libraries: []*legacyconfig.LibraryState{
+						{
+							ID: "example-library",
+							APIs: []*legacyconfig.API{
+								{
+									Path:          "google/example/api/v1",
+									ServiceConfig: "path/to/config.yaml",
+								},
+							},
+						},
+						{
+							ID: "another-library",
+							APIs: []*legacyconfig.API{
+								{
+									Path:          "google/another/api/v1",
+									ServiceConfig: "another/config.yaml",
+								},
+							},
+						},
+					},
+				},
+				librarianConfig: &legacyconfig.LibrarianConfig{},
+			},
+			want: []*config.Library{
+				{
+					Name: "another-library",
+					Channels: []*config.Channel{
+						{
+							Path: "google/another/api/v1",
+						},
+					},
+				},
+				{
+					Name: "example-library",
+					Channels: []*config.Channel{
+						{
+							Path: "google/example/api/v1",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "go_libraries",
+			input: &MigrationInput{
+				librarianState: &legacyconfig.LibrarianState{
+					Libraries: []*legacyconfig.LibraryState{
+						{
+							ID: "example-library",
+							APIs: []*legacyconfig.API{
+								{
+									Path:          "google/example/api/v1",
+									ServiceConfig: "path/to/config.yaml",
+								},
+							},
+						},
+						{
+							ID: "another-library",
+							APIs: []*legacyconfig.API{
+								{
+									Path:          "google/another/api/v1",
+									ServiceConfig: "another/config.yaml",
+								},
+							},
+						},
+					},
+				},
+				librarianConfig: &legacyconfig.LibrarianConfig{},
+				repoConfig: &RepoConfig{
+					Modules: []*RepoConfigModule{
+						{
+							Name: "example-library",
+							DeleteGenerationOutputPaths: []string{
+								"internal/generated/snippets/storage/internal",
+							},
+							APIs: []*RepoConfigAPI{
+								{
+									Path:            "google/maps/fleetengine/v1",
+									ClientDirectory: "proto_package: maps.fleetengine.v1",
+									DisableGAPIC:    true,
+									NestedProtos:    []string{"grafeas/grafeas.proto"},
+									ProtoPackage:    "google.cloud.translation.v3",
+								},
+							},
+							ModulePathVersion: "v2",
+						},
+					},
+				},
+			},
+			want: []*config.Library{
+				{
+					Name: "another-library",
+					Channels: []*config.Channel{
+						{
+							Path: "google/another/api/v1",
+						},
+					},
+				},
+				{
+					Name: "example-library",
+					Channels: []*config.Channel{
+						{
+							Path: "google/example/api/v1",
+						},
+					},
+					Go: &config.GoModule{
+						DeleteGenerationOutputPaths: []string{
+							"internal/generated/snippets/storage/internal",
+						},
+						GoAPIs: []*config.GoAPI{
+							{
+								Path:            "google/maps/fleetengine/v1",
+								ClientDirectory: "proto_package: maps.fleetengine.v1",
+								DisableGAPIC:    true,
+								NestedProtos:    []string{"grafeas/grafeas.proto"},
+								ProtoPackage:    "google.cloud.translation.v3",
+							},
+						},
+						ModulePathVersion: "v2",
+					},
+				},
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := buildLibraries(test.input)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestReadRepoConfig(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		repoPath string
+		want     *RepoConfig
+		wantErr  error
+	}{
+		{
+			name:     "success",
+			repoPath: "testdata/read-repo-config/success",
+			want: &RepoConfig{
+				Modules: []*RepoConfigModule{
+					{
+						Name: "bigquery/v2",
+						APIs: []*RepoConfigAPI{
+							{
+								Path:            "google/cloud/bigquery/v2",
+								ClientDirectory: "v2/apiv2"},
+						},
+					},
+					{
+						Name: "bigtable",
+						APIs: []*RepoConfigAPI{
+							{Path: "google/bigtable/v2", DisableGAPIC: true},
+							{Path: "google/bigtable/admin/v2", DisableGAPIC: true},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:     "no_file",
+			repoPath: "testdata/read-repo-config/no_file",
+			want:     nil,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := readRepoConfig(test.repoPath)
+			if test.wantErr != nil {
+				if !errors.Is(err, test.wantErr) {
+					t.Errorf("expected error containing %q, got: %v", test.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Error(err)
 			}
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
