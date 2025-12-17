@@ -22,15 +22,9 @@ import (
 	"strings"
 
 	"github.com/googleapis/librarian/internal/sidekick/api"
-	"github.com/googleapis/librarian/internal/sidekick/config"
-	"github.com/googleapis/librarian/internal/sidekick/parser"
 	"github.com/googleapis/librarian/internal/surfer/gcloud/utils"
 	"gopkg.in/yaml.v3"
 )
-
-// ==========================================
-// Main Entrypoint
-// ==========================================
 
 // Generate generates gcloud commands for a service.
 func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList string) error {
@@ -56,50 +50,6 @@ func Generate(ctx context.Context, googleapis, gcloudconfig, output, includeList
 	}
 	return nil
 }
-
-func createAPIModel(googleapisPath, includeList string) (*api.API, error) {
-	parserConfig := &config.Config{
-		General: config.GeneralConfig{
-			SpecificationFormat: "protobuf",
-		},
-		Source: map[string]string{
-			"local-root":   googleapisPath,
-			"include-list": includeList,
-		},
-	}
-
-	// We use `parser.CreateModel` instead of calling the individual parsing and processing
-	// functions directly because CreateModel is the designated entry point that ensures
-	// the API model is not only parsed but also fully linked (cross-referenced), validated,
-	// and processed with all necessary configuration overrides. This guarantees a complete
-	// and consistent model for the generator without code duplication. It's worth noting that
-	// we don't use all the functionality of post-processing of CreateModel, so depending
-	// on our needs, if we don't find ourselves needing the additional post-processing
-	// functionality, we could write our own simpler `CreateModel` function
-	model, err := parser.CreateModel(parserConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create API model: %w", err)
-	}
-	return model, nil
-}
-
-// readGcloudConfig loads the gcloud configuration from a gcloud.yaml file.
-func readGcloudConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read gcloud config file: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse gcloud config YAML: %w", err)
-	}
-	return &cfg, nil
-}
-
-// ==========================================
-// Service Processing
-// ==========================================
 
 func generateService(service *api.Service, overrides *Config, model *api.API, output string) error {
 	// Determine short service name for directory structure.
@@ -219,22 +169,6 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 	return nil
 }
 
-// ==========================================
-// Command Generation
-// ==========================================
-
-
-
-
-
-
-
-
-
-
-
-
-
 // newAttributesFromPattern parses a resource pattern string (e.g.,
 // "projects/{project}/locations/{location}") and extracts the attributes
 // that make up the resource's name.
@@ -275,6 +209,3 @@ func newAttributesFromPattern(pattern string) []Attribute {
 	}
 	return attributes
 }
-
-
-
