@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/googleapis/librarian/internal/sidekick/api"
 	"github.com/googleapis/librarian/internal/sidekick/config"
 	"github.com/googleapis/librarian/internal/sidekick/parser"
+	"github.com/googleapis/librarian/internal/surfer/gcloud/utils"
 	"github.com/iancoleman/strcase"
 	"gopkg.in/yaml.v3"
 )
@@ -173,7 +173,7 @@ func generateResourceCommands(collectionID string, methods []*api.Method, baseDi
 	for _, method := range methods {
 		// We map the API method name to a standard gcloud command verb.
 		// Example: `CreateInstance` -> "create"
-		verb, err := getVerb(method.Name)
+		verb, err := utils.GetVerb(method.Name)
 		if err != nil {
 			// Continue to the next method if we can't determine a verb,
 			// logging the issue might be useful here in the future.
@@ -255,7 +255,7 @@ func newCommand(method *api.Method, overrides *Config, model *api.API, service *
 
 	// Infer default release track from proto package.
 	// TODO(issue/allow_config_override_for_tracks.md): Allow gcloud config to overwrite the track for this command.
-	inferredTrack := inferTrackFromPackage(method.Service.Package)
+	inferredTrack := utils.InferTrackFromPackage(method.Service.Package)
 	cmd.ReleaseTracks = []string{strings.ToUpper(inferredTrack)}
 
 	// The core of the command generation happens here: we generate the arguments,
@@ -315,7 +315,7 @@ func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overri
 	// We skip fields that are marked as `OUTPUT_ONLY` in the proto, as these are
 	// not meant to be provided by the user. We also skip the "name" field, as it's
 	// handled by the primary resource argument.
-	if isOutputOnly(field) || field.Name == "name" {
+	if utils.IsOutputOnly(field) || field.Name == "name" {
 		return nil
 	}
 
@@ -397,7 +397,7 @@ func newParam(field *api.Field, apiField string, overrides *Config, model *api.A
 	} else {
 		// If it's a scalar type (string, int, bool, etc.), we map its proto type
 		// to the corresponding gcloud type.
-		param.Type = getGcloudType(field.Typez)
+		param.Type = utils.GetGcloudType(field.Typez)
 	}
 
 	// We try to find help text for this field in the `gcloud.yaml` config.
@@ -423,7 +423,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 
 	// We construct the gcloud collection path from the resource's pattern string.
 	// Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
-	collectionPath := getCollectionPathFromSegments(segments)
+	collectionPath := utils.GetCollectionPathFromSegments(segments)
 	hostParts := strings.Split(service.DefaultHost, ".")
 	shortServiceName := hostParts[0]
 
@@ -431,7 +431,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 	// For `Create` methods, this comes from the `_id` field. For others, it's the `name` field.
 	resourceName := strcase.ToSnake(strings.TrimSuffix(field.Name, "_id"))
 	if field.Name == "name" {
-		resourceName = getSingularFromSegments(segments)
+		resourceName = utils.GetSingularFromSegments(segments)
 	}
 
 	// We generate a helpful help text based on whether the command is a `Create` command or not.
@@ -473,17 +473,17 @@ func newResourceReferenceSpec(field *api.Field, model *api.API, overrides *Confi
 			// and falling back to parsing the pattern otherwise.
 			pluralName := def.Plural
 			if pluralName == "" {
-				pluralName = getPluralFromSegments(segments)
+				pluralName = utils.GetPluralFromSegments(segments)
 			}
 
 			// We determine the singular name from the pattern.
-			name := getSingularFromSegments(segments)
+			name := utils.GetSingularFromSegments(segments)
 
 			// We construct the full gcloud collection path for the referenced resource
 			//assuming the current service is the current command.
 			hostParts := strings.Split(service.DefaultHost, ".")
 			shortServiceName := hostParts[0]
-			baseCollectionPath := getCollectionPathFromSegments(segments)
+			baseCollectionPath := utils.GetCollectionPathFromSegments(segments)
 			fullCollectionPath := fmt.Sprintf("%s.%s", shortServiceName, baseCollectionPath)
 
 			// We assemble and return the `ResourceSpec`.
@@ -659,128 +659,11 @@ func getPluralResourceNameForMethod(method *api.Method, model *api.API) string {
 		// If the `plural` field is not present, we fall back to inferring the
 		// plural name from the resource's pattern string, as per AIP-122.
 		if len(resource.Patterns) > 0 {
-			return getPluralFromSegments(resource.Patterns[0])
+			return utils.GetPluralFromSegments(resource.Patterns[0])
 		}
 	}
 	return ""
 }
-
-// ==========================================
-// Naming & Formatting Utils
-// ==========================================
-
-// getGcloudType maps a proto data type to its corresponding gcloud type.
-func getGcloudType(t api.Typez) string {
-	switch t {
-	case api.STRING_TYPE:
-		return "" // Default is string
-	case api.INT32_TYPE, api.INT64_TYPE, api.UINT32_TYPE, api.UINT64_TYPE:
-		return "long"
-	case api.BOOL_TYPE:
-		return "boolean"
-	case api.FLOAT_TYPE, api.DOUBLE_TYPE:
-		return "float"
-	default:
-		return ""
-	}
-}
-
-// getVerb maps an API method name to a standard gcloud command verb.
-func getVerb(methodName string) (string, error) {
-	if methodName == "" {
-		return "", fmt.Errorf("method name cannot be empty")
-	}
-	switch {
-	case strings.HasPrefix(methodName, "Get"):
-		return "describe", nil
-	case strings.HasPrefix(methodName, "List"):
-		return "list", nil
-	case strings.HasPrefix(methodName, "Create"):
-		return "create", nil
-	case strings.HasPrefix(methodName, "Update"):
-		return "update", nil
-	case strings.HasPrefix(methodName, "Delete"):
-		return "delete", nil
-	default:
-		// For non-standard methods, we just use the snake_case version of the method name.
-		return strcase.ToSnake(methodName), nil
-	}
-}
-
-// isOutputOnly checks if a field is marked as output-only in the proto.
-func isOutputOnly(field *api.Field) bool {
-	return slices.Contains(field.Behavior, api.FIELD_BEHAVIOR_OUTPUT_ONLY)
-}
-
-// getPluralFromSegments infers the plural name of a resource from its structured path segments.
-// Per AIP-122, the plural is the literal segment before the final variable segment.
-// Example: `.../instances/{instance}` -> "instances"
-func getPluralFromSegments(segments []api.PathSegment) string {
-	if len(segments) >= 2 {
-		lastSegment := segments[len(segments)-1]
-		if lastSegment.Variable != nil {
-			// The second to last segment should be the literal plural name
-			secondLastSegment := segments[len(segments)-2]
-			if secondLastSegment.Literal != nil {
-				return *secondLastSegment.Literal
-			}
-		}
-	}
-	return ""
-}
-
-// getSingularFromSegments infers the singular name of a resource from its structured path segments.
-// The singular is the name of the final variable segment.
-// Example: `.../instances/{instance}` -> "instance"
-func getSingularFromSegments(segments []api.PathSegment) string {
-	if len(segments) > 0 {
-		last := segments[len(segments)-1]
-		if last.Variable != nil && len(last.Variable.FieldPath) > 0 {
-			// Typically the variable name is the last component of the field path
-			// e.g. for `name` binding it might be implied? No, httprule parser populates FieldPath.
-			return last.Variable.FieldPath[len(last.Variable.FieldPath)-1]
-		}
-	}
-	return ""
-}
-
-// getCollectionPathFromSegments constructs the base gcloud collection path from a
-// structured resource pattern, according to AIP-122 conventions.
-// It joins the literal collection identifiers with dots.
-// Example: `projects/{project}/locations/{location}/instances/{instance}` -> `projects.locations.instances`
-func getCollectionPathFromSegments(segments []api.PathSegment) string {
-	var collectionParts []string
-	for i := 0; i < len(segments)-1; i++ {
-		// A collection identifier is a literal segment followed by a variable segment.
-		if segments[i].Literal != nil && segments[i+1].Variable != nil {
-			collectionParts = append(collectionParts, *segments[i].Literal)
-		}
-	}
-	return strings.Join(collectionParts, ".")
-}
-
-// inferTrackFromPackage infers the release track from the proto package name.
-// as mandated per AIP-185
-// e.g. "google.cloud.parallelstore.v1beta" -> "beta"
-func inferTrackFromPackage(pkg string) string {
-	parts := strings.Split(pkg, ".")
-	if len(parts) == 0 {
-		return "ga"
-	}
-	version := parts[len(parts)-1]
-	if strings.Contains(version, "alpha") {
-		return "alpha"
-	}
-	if strings.Contains(version, "beta") {
-		return "beta"
-
-	}
-	return "ga"
-}
-
-// ==========================================
-// Config Overrides
-// ==========================================
 
 // findHelpTextRule finds the help text rule from the config that applies to the current method.
 func findHelpTextRule(method *api.Method, overrides *Config) *HelpTextRule {
