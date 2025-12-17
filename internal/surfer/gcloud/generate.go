@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/googleapis/librarian/internal/sidekick/api"
@@ -315,7 +316,7 @@ func addFlattenedParams(field *api.Field, prefix string, args *Arguments, overri
 	// We skip fields that are marked as `OUTPUT_ONLY` in the proto, as these are
 	// not meant to be provided by the user. We also skip the "name" field, as it's
 	// handled by the primary resource argument.
-	if utils.IsOutputOnly(field) || field.Name == "name" {
+	if slices.Contains(field.Behavior, api.FIELD_BEHAVIOR_OUTPUT_ONLY) || field.Name == "name" {
 		return nil
 	}
 

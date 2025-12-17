@@ -15,8 +15,6 @@
 package utils
 
 import (
-	"slices"
-
 	"github.com/googleapis/librarian/internal/sidekick/api"
 )
 
@@ -36,7 +34,4 @@ func GetGcloudType(t api.Typez) string {
 	}
 }
 
-// IsOutputOnly checks if a field is marked as output-only in the proto.
-func IsOutputOnly(field *api.Field) bool {
-	return slices.Contains(field.Behavior, api.FIELD_BEHAVIOR_OUTPUT_ONLY)
-}
+
