@@ -33,6 +33,52 @@ type Config struct {
 	// Libraries contains configuration overrides for libraries that need
 	// special handling, and differ from default settings.
 	Libraries []*Library `yaml:"libraries,omitempty"`
+
+	// Release holds the configuration parameter for any `${lang}-release` subcommand.
+	Release *Release `yaml:"release,omitempty"`
+}
+
+// Release holds the configuration parameter for publish command.
+type Release struct {
+	// Remote sets the name of the source-of-truth remote for releases, typically `upstream`.
+	Remote string `yaml:"remote,omitempty"`
+
+	// Branch sets the name of the release branch, typically `main`
+	Branch string `yaml:"branch,omitempty"`
+
+	// Tools defines the list of tools to install, indexed by installer.
+	Tools map[string][]Tool `yaml:"tools,omitempty"`
+
+	// Preinstalled tools defines the list of tools that must be pre-installed.
+	//
+	// This is indexed by the well-known name of the tool vs. its path, e.g.
+	// [preinstalled]
+	// cargo = /usr/bin/cargo
+	Preinstalled map[string]string `yaml:"preinstalled,omitempty"`
+
+	// IgnoredChanges defines globs that are ignored in change analysis.
+	IgnoredChanges []string `yaml:"ignored_changes,omitempty"`
+
+	// An alternative location for the `roots.pem` file. If empty it has no
+	// effect.
+	RootsPem string `yaml:"roots_pem,omitempty"`
+}
+
+// GetExecutablePath finds the path for a given command, checking for an
+// override in the configuration first.
+func (r *Release) GetExecutablePath(commandName string) string {
+	if r != nil && r.Preinstalled != nil {
+		if exe, ok := r.Preinstalled[commandName]; ok {
+			return exe
+		}
+	}
+	return commandName
+}
+
+// Tool defines the configuration required to install helper tools.
+type Tool struct {
+	Name    string `yaml:"name"`
+	Version string `yaml:"version,omitempty"`
 }
 
 // Sources references external source repositories.
@@ -42,6 +88,15 @@ type Sources struct {
 
 	// Googleapis is the googleapis repository configuration.
 	Googleapis *Source `yaml:"googleapis,omitempty"`
+
+	// Showcase is the showcase repository configuration.
+	Showcase *Source `yaml:"showcase,omitempty"`
+
+	// ProtobufSrc is the path to the `protobuf` repository, used as include directory for `protoc`.
+	ProtobufSrc *Source `yaml:"protobuf,omitempty"`
+
+	// Conformance is the path to the `conformance-tests` repository, used as include directory for `protoc`.
+	Conformance *Source `yaml:"conformance,omitempty"`
 }
 
 // Source represents a source repository.
@@ -55,6 +110,10 @@ type Source struct {
 	// Dir is a local directory path to use instead of fetching.
 	// If set, Commit and SHA256 are ignored.
 	Dir string `yaml:"dir,omitempty"`
+
+	// Subpath is a directory inside the fetched archive that should be treated as
+	// the root for operations.
+	Subpath string `yaml:"subpath,omitempty"`
 }
 
 // Default contains default settings for all libraries.
@@ -121,6 +180,9 @@ type Library struct {
 	// SpecificationFormat specifies the API specification format. Valid values
 	// are "protobuf" (default) or "discovery".
 	SpecificationFormat string `yaml:"specification_format,omitempty"`
+
+	// Roots specifies the source roots to use for generation. Defaults to googleapis.
+	Roots []string `yaml:"roots,omitempty"`
 
 	// Transport is the transport protocol, such as "grpc+rest" or "grpc". This
 	// overrides Default.Transport.

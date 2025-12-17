@@ -145,3 +145,76 @@ func TestParseIdentifier(t *testing.T) {
 		t.Errorf("mismatch want=abc, got=%v, wantPos=3, gotPos=%d", got, pos)
 	}
 }
+
+func TestParseResourcePattern(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		pattern     string
+		want        *api.PathTemplate
+		expectErr   bool
+		explanation string
+	}{
+		{
+			"single wildcard",
+			api.SingleSegmentWildcard,
+			api.NewPathTemplate(),
+			false,
+			"should parse a single wildcard as a literal segment",
+		},
+		{
+			"standard hierarchical pattern",
+			"projects/{project}/serviceAccounts/{service_account}",
+			api.NewPathTemplate().
+				WithLiteral("projects").
+				WithVariableNamed("project").
+				WithLiteral("serviceAccounts").
+				WithVariableNamed("service_account"),
+			false,
+			"should parse a standard hierarchical resource pattern correctly",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ParseResourcePattern(test.pattern)
+			if test.expectErr {
+				if err == nil {
+					t.Fatalf("ParseResourcePattern(%s) succeeded, want error: %s", test.pattern, test.explanation)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("ParseResourcePattern(%s) failed: %v", test.pattern, err)
+				}
+				if diff := cmp.Diff(test.want, got, cmpopts.EquateEmpty()); diff != "" {
+					t.Fatalf("failed parsing resource pattern [\"%s\"] (-want, +got):\n%s", test.pattern, diff)
+				}
+			}
+		})
+	}
+}
+
+func TestParseResourcePatternWithNonStandardSeparators(t *testing.T) {
+	// TODO(https://github.com/googleapis/librarian/issues/3258): at this
+	// moment, we don't care what the exact representation is for this
+	// input. We just care that parsing does not error.
+	testCases := []struct {
+		name    string
+		pattern string
+	}{
+		{
+			name:    "tilde separator",
+			pattern: "users/{user}/profile/blurbs/legacy/{legacy_user}~{blurb}",
+		},
+		{
+			name:    "dot separator",
+			pattern: "rooms/{room}/blurbs/legacy/{legacy_room}.{blurb}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseResourcePattern(tc.pattern)
+			if err != nil {
+				t.Fatalf("ParseResourcePattern(%q) failed; want no error, got %v", tc.pattern, err)
+			}
+		})
+	}
+}

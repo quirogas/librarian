@@ -15,22 +15,46 @@
 package rust
 
 import (
+	"path"
 	"strings"
 
 	"github.com/googleapis/librarian/internal/config"
 	sidekickconfig "github.com/googleapis/librarian/internal/sidekick/config"
 )
 
-func toSidekickConfig(library *config.Library, channel *config.Channel, googleapisDir, discoveryDir string) *sidekickconfig.Config {
-	source := map[string]string{
-		"googleapis-root": googleapisDir,
-	}
+func toSidekickConfig(library *config.Library, channel *config.Channel, googleapisDir, discoveryDir, protobufRootDir, protobufSubDir, conformanceDir, showcaseDir string) *sidekickconfig.Config {
+	source := map[string]string{}
 	specFormat := "protobuf"
-	if library.SpecificationFormat == "discovery" {
-		specFormat = "disco"
-		source["discovery-root"] = discoveryDir
-		source["roots"] = "discovery,googleapis"
+	if library.SpecificationFormat != "" {
+		specFormat = library.SpecificationFormat
 	}
+	if specFormat == "discovery" {
+		specFormat = "disco"
+	}
+
+	if len(library.Roots) == 0 && googleapisDir != "" {
+		// Default to googleapis if no roots are specified.
+		source["googleapis-root"] = googleapisDir
+		source["roots"] = "googleapis"
+	} else {
+		source["roots"] = strings.Join(library.Roots, ",")
+		rootMap := map[string]struct {
+			path string
+			key  string
+		}{
+			"googleapis":   {path: googleapisDir, key: "googleapis-root"},
+			"discovery":    {path: discoveryDir, key: "discovery-root"},
+			"showcase":     {path: showcaseDir, key: "showcase-root"},
+			"protobuf-src": {path: path.Join(protobufRootDir, protobufSubDir), key: "protobuf-src-root"},
+			"conformance":  {path: conformanceDir, key: "conformance-root"},
+		}
+		for _, root := range library.Roots {
+			if r, ok := rootMap[root]; ok && r.path != "" {
+				source[r.key] = r.path
+			}
+		}
+	}
+
 	if library.DescriptionOverride != "" {
 		source["description-override"] = library.DescriptionOverride
 	}
@@ -132,8 +156,8 @@ func buildCodec(library *config.Library) map[string]string {
 	if rust.RoutingRequired {
 		codec["routing-required"] = "true"
 	}
-	if rust.GenerateSetterSamples {
-		codec["generate-setter-samples"] = "true"
+	if rust.GenerateSetterSamples != "" {
+		codec["generate-setter-samples"] = rust.GenerateSetterSamples
 	}
 	if rust.GenerateRpcSamples {
 		codec["generate-rpc-samples"] = "true"
