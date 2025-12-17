@@ -132,7 +132,7 @@ func generateService(service *api.Service, overrides *Config, model *api.API, ou
 		// For each method, we determine the plural name of the resource it operates on.
 		// This plural name (e.g., "instances") will serve as our collection ID.
 		// Example: For the `CreateInstance` method, this will return "instances".
-		collectionID := getPluralResourceNameForMethod(method, model)
+		collectionID := utils.GetPluralResourceNameForMethod(method, model)
 
 		// If a collection ID is found, we add the method to our map.
 		if collectionID != "" {
@@ -292,7 +292,7 @@ func newArguments(method *api.Method, overrides *Config, model *api.API, service
 
 		// We check if the current field represents the primary resource of the command.
 		// For example, in a `CreateInstance` method, this would be the `instance_id` field.
-		if isPrimaryResource(field, method) {
+		if utils.IsPrimaryResource(field, method) {
 			// If it is the primary resource, we generate a special positional argument for it.
 			param := newPrimaryResourceParam(field, method, model, overrides, service)
 			args.Params = append(args.Params, param)
@@ -416,7 +416,7 @@ func newParam(field *api.Field, apiField string, overrides *Config, model *api.A
 // This is the argument that represents the resource being acted upon (e.g., the instance name).
 func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.API, _ *Config, service *api.Service) Param {
 	// We first need to get the full resource definition for the method.
-	resource := getResourceForMethod(method, model)
+	resource := utils.GetResourceForMethod(method, model)
 	var segments []api.PathSegment
 	if resource != nil && len(resource.Patterns) > 0 {
 		segments = resource.Patterns[0]
@@ -450,7 +450,7 @@ func newPrimaryResourceParam(field *api.Field, method *api.Method, model *api.AP
 		RequestIDField:    strcase.ToLowerCamel(field.Name),
 		ResourceSpec: &ResourceSpec{
 			Name:                  resourceName,
-			PluralName:            getPluralResourceNameForMethod(method, model),
+			PluralName:            utils.GetPluralResourceNameForMethod(method, model),
 			Collection:            fmt.Sprintf("%s.%s", shortServiceName, collectionPath),
 			DisableAutoCompleters: false,
 			Attributes:            newAttributesFromSegments(segments),
@@ -546,7 +546,7 @@ func newRequest(method *api.Method, overrides *Config, model *api.API) *Request 
 	// TODO(issues/dynamic_request_async_collection.md): The collection path is partially hardcoded.
 	return &Request{
 		APIVersion: apiVersion(overrides),
-		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", getPluralResourceNameForMethod(method, model))},
+		Collection: []string{fmt.Sprintf("parallelstore.projects.locations.%s", utils.GetPluralResourceNameForMethod(method, model))},
 	}
 }
 
@@ -558,113 +558,7 @@ func newAsync(method *api.Method, overrides *Config) *Async {
 	}
 }
 
-// ==========================================
-// Resource Helpers
-// ==========================================
 
-// isPrimaryResource determines if a field represents the primary resource of a method.
-func isPrimaryResource(field *api.Field, method *api.Method) bool {
-	if method.InputType == nil {
-		return false
-	}
-	// For `Create` methods, the primary resource is identified by a field named
-	// in the format "{resource}_id" (e.g., "instance_id").
-	if strings.HasPrefix(method.Name, "Create") {
-		resourceName := getResourceName(method)
-		if resourceName != "" && field.Name == strcase.ToSnake(resourceName)+"_id" {
-			return true
-		}
-	}
-	// For `Get`, `Delete`, and `Update` methods, the primary resource is identified
-	// by a field named "name", which holds the full resource name.
-	if (strings.HasPrefix(method.Name, "Get") || strings.HasPrefix(method.Name, "Delete") || strings.HasPrefix(method.Name, "Update")) && field.Name == "name" {
-		return true
-	}
-	return false
-}
-
-// getResourceName extracts the name of the resource from a method's input message.
-// For example, for `CreateInstanceRequest`, it would return "Instance".
-func getResourceName(method *api.Method) string {
-	for _, f := range method.InputType.Fields {
-		if msg := f.MessageType; msg != nil && msg.Resource != nil {
-			return msg.Name
-		}
-	}
-	return ""
-}
-
-// getResourceForMethod finds the `api.Resource` definition associated with a method.
-// This is a crucial function for linking a method to the resource it operates on.
-func getResourceForMethod(method *api.Method, model *api.API) *api.Resource {
-	if method.InputType == nil {
-		return nil
-	}
-
-	// Strategy 1: For `Create` and `Update`, the request message usually contains
-	// a field that *is* the resource message. This message is annotated with `(google.api.resource)`.
-	for _, f := range method.InputType.Fields {
-		if msg := f.MessageType; msg != nil && msg.Resource != nil {
-			return msg.Resource
-		}
-	}
-
-	// Strategy 2: For `Get`, `Delete`, and `List`, the request message has a `name`
-	// or `parent` field with a `(google.api.resource_reference)`.
-	var resourceType string
-	for _, field := range method.InputType.Fields {
-		if (field.Name == "name" || field.Name == "parent") && field.ResourceReference != nil {
-			// For collection methods (like List), the reference is to the parent,
-			// and the resource we care about is the `child_type`.
-			if field.ResourceReference.ChildType != "" {
-				resourceType = field.ResourceReference.ChildType
-			} else {
-				resourceType = field.ResourceReference.Type
-			}
-			break
-		}
-	}
-
-	if resourceType == "" {
-		return nil
-	}
-
-	// Use the API model's indexed maps for an efficient lookup.
-	for _, r := range model.ResourceDefinitions {
-		if r.Type == resourceType {
-			return r
-		}
-	}
-
-	// Also check resources defined on messages directly.
-	for _, m := range model.Messages {
-		if m.Resource != nil && m.Resource.Type == resourceType {
-			return m.Resource
-		}
-	}
-
-	return nil
-}
-
-// getPluralResourceNameForMethod determines the plural name of a resource. It follows a clear
-// hierarchy of truth: first, the explicit `plural` field in the resource
-// definition, and second, inference from the resource pattern.
-func getPluralResourceNameForMethod(method *api.Method, model *api.API) string {
-	resource := getResourceForMethod(method, model)
-	if resource != nil {
-		// The `plural` field in the `(google.api.resource)` annotation is the
-		// most authoritative source.
-		if resource.Plural != "" {
-			return resource.Plural
-		}
-		// If the `plural` field is not present, we fall back to inferring the
-		// plural name from the resource's pattern string, as per AIP-122.
-		if len(resource.Patterns) > 0 {
-			return utils.GetPluralFromSegments(resource.Patterns[0])
-		}
-	}
-	return ""
-}
 
 // findHelpTextRule finds the help text rule from the config that applies to the current method.
 func findHelpTextRule(method *api.Method, overrides *Config) *HelpTextRule {
