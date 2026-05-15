@@ -19,8 +19,8 @@
 import * as v1 from './v1';
 import * as v1beta from './v1beta';
 
-const WorkstationsClient = v1beta.WorkstationsClient;
-type WorkstationsClient = v1beta.WorkstationsClient;
+const WorkstationsClient = v1.WorkstationsClient;
+type WorkstationsClient = v1.WorkstationsClient;
 
 export {v1, v1beta, WorkstationsClient};
 export default {v1, v1beta, WorkstationsClient};

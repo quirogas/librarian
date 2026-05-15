@@ -19,8 +19,8 @@
 import * as v1 from './v1';
 import * as v1beta1 from './v1beta1';
 
-const ManagedIdentitiesServiceClient = v1beta1.ManagedIdentitiesServiceClient;
-type ManagedIdentitiesServiceClient = v1beta1.ManagedIdentitiesServiceClient;
+const ManagedIdentitiesServiceClient = v1.ManagedIdentitiesServiceClient;
+type ManagedIdentitiesServiceClient = v1.ManagedIdentitiesServiceClient;
 
 export {v1, v1beta1, ManagedIdentitiesServiceClient};
 export default {v1, v1beta1, ManagedIdentitiesServiceClient};

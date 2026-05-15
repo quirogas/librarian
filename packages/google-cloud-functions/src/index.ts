@@ -21,10 +21,10 @@ import * as v2 from './v2';
 import * as v2alpha from './v2alpha';
 import * as v2beta from './v2beta';
 
-const CloudFunctionsServiceClient = v1.CloudFunctionsServiceClient;
-type CloudFunctionsServiceClient = v1.CloudFunctionsServiceClient;
+const FunctionServiceClient = v2.FunctionServiceClient;
+type FunctionServiceClient = v2.FunctionServiceClient;
 
-export {v1, v2, v2alpha, v2beta, CloudFunctionsServiceClient};
-export default {v1, v2, v2alpha, v2beta, CloudFunctionsServiceClient};
+export {v1, v2, v2alpha, v2beta, FunctionServiceClient};
+export default {v1, v2, v2alpha, v2beta, FunctionServiceClient};
 import * as protos from '../protos/protos';
 export {protos};

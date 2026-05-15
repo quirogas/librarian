@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-support",
-    "version": "2.2.1",
+    "version": "2.2.2",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -423,7 +423,7 @@
       "regionTag": "cloudsupport_v2beta_generated_CaseService_SearchCaseClassifications_async",
       "title": "CaseAttachmentService searchCaseClassifications Sample",
       "origin": "API_DEFINITION",
-      "description": " Retrieve valid classifications to use when creating a support case. Classifications are hierarchical. Each classification is a string containing all levels of the hierarchy separated by `\" > \"`. For example, `\"Technical Issue > Compute > Compute Engine\"`. Classification IDs returned by this endpoint are valid for at least six months. When a classification is deactivated, this endpoint immediately stops returning it. After six months, `case.create` requests using the classification will fail.",
+      "description": " Retrieve valid classifications to use when creating a support case. Classifications are hierarchical. Each classification is a string containing all levels of the hierarchy separated by `\" \u003e \"`. For example, `\"Technical Issue \u003e Compute \u003e Compute Engine\"`. Classification IDs returned by this endpoint are valid for at least six months. When a classification is deactivated, this endpoint immediately stops returning it. After six months, `case.create` requests using the classification will fail.",
       "canonical": true,
       "file": "case_service.search_case_classifications.js",
       "language": "JAVASCRIPT",

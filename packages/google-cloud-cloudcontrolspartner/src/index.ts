@@ -19,10 +19,10 @@
 import * as v1 from './v1';
 import * as v1beta from './v1beta';
 
-const CloudControlsPartnerCoreClient = v1beta.CloudControlsPartnerCoreClient;
-type CloudControlsPartnerCoreClient = v1beta.CloudControlsPartnerCoreClient;
-const CloudControlsPartnerMonitoringClient = v1beta.CloudControlsPartnerMonitoringClient;
-type CloudControlsPartnerMonitoringClient = v1beta.CloudControlsPartnerMonitoringClient;
+const CloudControlsPartnerCoreClient = v1.CloudControlsPartnerCoreClient;
+type CloudControlsPartnerCoreClient = v1.CloudControlsPartnerCoreClient;
+const CloudControlsPartnerMonitoringClient = v1.CloudControlsPartnerMonitoringClient;
+type CloudControlsPartnerMonitoringClient = v1.CloudControlsPartnerMonitoringClient;
 
 export {v1, v1beta, CloudControlsPartnerCoreClient, CloudControlsPartnerMonitoringClient};
 export default {v1, v1beta, CloudControlsPartnerCoreClient, CloudControlsPartnerMonitoringClient};

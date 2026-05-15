@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-cloudcontrolspartner",
-    "version": "0.6.1",
+    "version": "0.6.2",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -515,7 +515,7 @@
       "regionTag": "cloudcontrolspartner_v1_generated_CloudControlsPartnerMonitoring_ListViolations_async",
       "title": "CloudControlsPartnerCore listViolations Sample",
       "origin": "API_DEFINITION",
-      "description": " Lists Violations for a workload Callers may also choose to read across multiple Customers or for a single customer as per [AIP-159](https://google.aip.dev/159) by using '-' (the hyphen or dash character) as a wildcard character instead of {customer} & {workload}. Format: `organizations/{organization}/locations/{location}/customers/{customer}/workloads/{workload}`",
+      "description": " Lists Violations for a workload Callers may also choose to read across multiple Customers or for a single customer as per [AIP-159](https://google.aip.dev/159) by using '-' (the hyphen or dash character) as a wildcard character instead of {customer} \u0026 {workload}. Format: `organizations/{organization}/locations/{location}/customers/{customer}/workloads/{workload}`",
       "canonical": true,
       "file": "cloud_controls_partner_monitoring.list_violations.js",
       "language": "JAVASCRIPT",

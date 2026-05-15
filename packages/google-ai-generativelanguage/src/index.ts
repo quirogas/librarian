@@ -17,31 +17,16 @@
 // ** All changes to this file may be overwritten. **
 
 import * as v1 from './v1';
-import * as v1alpha from './v1alpha';
 import * as v1beta from './v1beta';
 import * as v1beta2 from './v1beta2';
 import * as v1beta3 from './v1beta3';
 
-const CacheServiceClient = v1beta.CacheServiceClient;
-type CacheServiceClient = v1beta.CacheServiceClient;
-const DiscussServiceClient = v1beta.DiscussServiceClient;
-type DiscussServiceClient = v1beta.DiscussServiceClient;
-const FileServiceClient = v1beta.FileServiceClient;
-type FileServiceClient = v1beta.FileServiceClient;
-const GenerativeServiceClient = v1beta.GenerativeServiceClient;
-type GenerativeServiceClient = v1beta.GenerativeServiceClient;
-const ModelServiceClient = v1beta.ModelServiceClient;
-type ModelServiceClient = v1beta.ModelServiceClient;
-const PermissionServiceClient = v1beta.PermissionServiceClient;
-type PermissionServiceClient = v1beta.PermissionServiceClient;
-const PredictionServiceClient = v1beta.PredictionServiceClient;
-type PredictionServiceClient = v1beta.PredictionServiceClient;
-const RetrieverServiceClient = v1beta.RetrieverServiceClient;
-type RetrieverServiceClient = v1beta.RetrieverServiceClient;
-const TextServiceClient = v1beta.TextServiceClient;
-type TextServiceClient = v1beta.TextServiceClient;
+const GenerativeServiceClient = v1.GenerativeServiceClient;
+type GenerativeServiceClient = v1.GenerativeServiceClient;
+const ModelServiceClient = v1.ModelServiceClient;
+type ModelServiceClient = v1.ModelServiceClient;
 
-export {v1, v1alpha, v1beta, v1beta2, v1beta3, CacheServiceClient, DiscussServiceClient, FileServiceClient, GenerativeServiceClient, ModelServiceClient, PermissionServiceClient, PredictionServiceClient, RetrieverServiceClient, TextServiceClient};
-export default {v1, v1alpha, v1beta, v1beta2, v1beta3, CacheServiceClient, DiscussServiceClient, FileServiceClient, GenerativeServiceClient, ModelServiceClient, PermissionServiceClient, PredictionServiceClient, RetrieverServiceClient, TextServiceClient};
+export {v1, v1beta, v1beta2, v1beta3, GenerativeServiceClient, ModelServiceClient};
+export default {v1, v1beta, v1beta2, v1beta3, GenerativeServiceClient, ModelServiceClient};
 import * as protos from '../protos/protos';
 export {protos};

@@ -20,8 +20,8 @@ import * as v1 from './v1';
 import * as v1alpha from './v1alpha';
 import * as v1beta from './v1beta';
 
-const WebSecurityScannerClient = v1beta.WebSecurityScannerClient;
-type WebSecurityScannerClient = v1beta.WebSecurityScannerClient;
+const WebSecurityScannerClient = v1.WebSecurityScannerClient;
+type WebSecurityScannerClient = v1.WebSecurityScannerClient;
 
 export {v1, v1alpha, v1beta, WebSecurityScannerClient};
 export default {v1, v1alpha, v1beta, WebSecurityScannerClient};

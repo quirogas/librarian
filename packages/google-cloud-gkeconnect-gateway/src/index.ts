@@ -19,8 +19,8 @@
 import * as v1 from './v1';
 import * as v1beta1 from './v1beta1';
 
-const GatewayControlClient = v1beta1.GatewayControlClient;
-type GatewayControlClient = v1beta1.GatewayControlClient;
+const GatewayControlClient = v1.GatewayControlClient;
+type GatewayControlClient = v1.GatewayControlClient;
 
 export {v1, v1beta1, GatewayControlClient};
 export default {v1, v1beta1, GatewayControlClient};

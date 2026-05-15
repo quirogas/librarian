@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-osconfig",
-    "version": "4.3.1",
+    "version": "4.3.2",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -13,7 +13,7 @@
   "snippets": [
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_CreateOSPolicyAssignment_async",
-      "title": "OsConfigZonalService createOSPolicyAssignment Sample",
+      "title": "OsConfigServiceClient createOSPolicyAssignment Sample",
       "origin": "API_DEFINITION",
       "description": " Create an OS policy assignment. This method also creates the first revision of the OS policy assignment. This method returns a long running operation (LRO) that contains the rollout details. The rollout can be cancelled by cancelling the LRO. For more information, see [Method: projects.locations.osPolicyAssignments.operations.cancel](https://cloud.google.com/compute/docs/osconfig/rest/v1alpha/projects.locations.osPolicyAssignments.operations/cancel).",
       "canonical": true,
@@ -61,7 +61,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_UpdateOSPolicyAssignment_async",
-      "title": "OsConfigZonalService updateOSPolicyAssignment Sample",
+      "title": "OsConfigServiceClient updateOSPolicyAssignment Sample",
       "origin": "API_DEFINITION",
       "description": " Update an existing OS policy assignment. This method creates a new revision of the OS policy assignment. This method returns a long running operation (LRO) that contains the rollout details. The rollout can be cancelled by cancelling the LRO. For more information, see [Method: projects.locations.osPolicyAssignments.operations.cancel](https://cloud.google.com/compute/docs/osconfig/rest/v1alpha/projects.locations.osPolicyAssignments.operations/cancel).",
       "canonical": true,
@@ -105,7 +105,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_GetOSPolicyAssignment_async",
-      "title": "OsConfigZonalService getOSPolicyAssignment Sample",
+      "title": "OsConfigServiceClient getOSPolicyAssignment Sample",
       "origin": "API_DEFINITION",
       "description": " Retrieve an existing OS policy assignment. This method always returns the latest revision. In order to retrieve a previous revision of the assignment, also provide the revision ID in the `name` parameter.",
       "canonical": true,
@@ -145,7 +145,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListOSPolicyAssignments_async",
-      "title": "OsConfigZonalService listOSPolicyAssignments Sample",
+      "title": "OsConfigServiceClient listOSPolicyAssignments Sample",
       "origin": "API_DEFINITION",
       "description": " List the OS policy assignments under the parent resource. For each OS policy assignment, the latest revision is returned.",
       "canonical": true,
@@ -193,7 +193,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListOSPolicyAssignmentRevisions_async",
-      "title": "OsConfigZonalService listOSPolicyAssignmentRevisions Sample",
+      "title": "OsConfigServiceClient listOSPolicyAssignmentRevisions Sample",
       "origin": "API_DEFINITION",
       "description": " List the OS policy assignment revisions for a given OS policy assignment.",
       "canonical": true,
@@ -241,7 +241,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_DeleteOSPolicyAssignment_async",
-      "title": "OsConfigZonalService deleteOSPolicyAssignment Sample",
+      "title": "OsConfigServiceClient deleteOSPolicyAssignment Sample",
       "origin": "API_DEFINITION",
       "description": " Delete the OS policy assignment. This method creates a new revision of the OS policy assignment. This method returns a long running operation (LRO) that contains the rollout details. The rollout can be cancelled by cancelling the LRO. If the LRO completes and is not cancelled, all revisions associated with the OS policy assignment are deleted. For more information, see [Method: projects.locations.osPolicyAssignments.operations.cancel](https://cloud.google.com/compute/docs/osconfig/rest/v1alpha/projects.locations.osPolicyAssignments.operations/cancel).",
       "canonical": true,
@@ -281,7 +281,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_GetInstanceOSPoliciesCompliance_async",
-      "title": "OsConfigZonalService getInstanceOSPoliciesCompliance Sample",
+      "title": "OsConfigServiceClient getInstanceOSPoliciesCompliance Sample",
       "origin": "API_DEFINITION",
       "description": " Get OS policies compliance data for the specified Compute Engine VM instance.",
       "canonical": true,
@@ -321,7 +321,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListInstanceOSPoliciesCompliances_async",
-      "title": "OsConfigZonalService listInstanceOSPoliciesCompliances Sample",
+      "title": "OsConfigServiceClient listInstanceOSPoliciesCompliances Sample",
       "origin": "API_DEFINITION",
       "description": " List OS policies compliance data for all Compute Engine VM instances in the specified zone.",
       "canonical": true,
@@ -373,7 +373,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_GetOSPolicyAssignmentReport_async",
-      "title": "OsConfigZonalService getOSPolicyAssignmentReport Sample",
+      "title": "OsConfigServiceClient getOSPolicyAssignmentReport Sample",
       "origin": "API_DEFINITION",
       "description": " Get the OS policy asssignment report for the specified Compute Engine VM instance.",
       "canonical": true,
@@ -413,7 +413,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListOSPolicyAssignmentReports_async",
-      "title": "OsConfigZonalService listOSPolicyAssignmentReports Sample",
+      "title": "OsConfigServiceClient listOSPolicyAssignmentReports Sample",
       "origin": "API_DEFINITION",
       "description": " List OS policy asssignment reports for all Compute Engine VM instances in the specified zone.",
       "canonical": true,
@@ -465,7 +465,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_GetInventory_async",
-      "title": "OsConfigZonalService getInventory Sample",
+      "title": "OsConfigServiceClient getInventory Sample",
       "origin": "API_DEFINITION",
       "description": " Get inventory data for the specified VM instance. If the VM has no associated inventory, the message `NOT_FOUND` is returned.",
       "canonical": true,
@@ -509,7 +509,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListInventories_async",
-      "title": "OsConfigZonalService listInventories Sample",
+      "title": "OsConfigServiceClient listInventories Sample",
       "origin": "API_DEFINITION",
       "description": " List inventory data for all VM instances in the specified zone.",
       "canonical": true,
@@ -565,7 +565,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_GetVulnerabilityReport_async",
-      "title": "OsConfigZonalService getVulnerabilityReport Sample",
+      "title": "OsConfigServiceClient getVulnerabilityReport Sample",
       "origin": "API_DEFINITION",
       "description": " Gets the vulnerability report for the specified VM instance. Only VMs with inventory data have vulnerability reports associated with them.",
       "canonical": true,
@@ -605,7 +605,7 @@
     },
     {
       "regionTag": "osconfig_v1alpha_generated_OsConfigZonalService_ListVulnerabilityReports_async",
-      "title": "OsConfigZonalService listVulnerabilityReports Sample",
+      "title": "OsConfigServiceClient listVulnerabilityReports Sample",
       "origin": "API_DEFINITION",
       "description": " List vulnerability reports for all VM instances in the specified zone.",
       "canonical": true,

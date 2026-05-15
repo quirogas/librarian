@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-data",
-    "version": "0.1.0",
+    "version": "6.0.0",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -487,7 +487,7 @@
       "regionTag": "analyticsdata_v1alpha_generated_AlphaAnalyticsData_QueryReportTask_async",
       "title": "AlphaAnalyticsData queryReportTask Sample",
       "origin": "API_DEFINITION",
-      "description": " Retrieves a report task's content. After requesting the `CreateReportTask`, you are able to retrieve the report content once the report is ACTIVE. This method will return an error if the report task's state is not `ACTIVE`. A query response will return the tabular row & column values of the report.",
+      "description": " Retrieves a report task's content. After requesting the `CreateReportTask`, you are able to retrieve the report content once the report is ACTIVE. This method will return an error if the report task's state is not `ACTIVE`. A query response will return the tabular row \u0026 column values of the report.",
       "canonical": true,
       "file": "alpha_analytics_data.query_report_task.js",
       "language": "JAVASCRIPT",

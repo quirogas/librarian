@@ -18,14 +18,13 @@
 
 import * as v1 from './v1';
 import * as v1alpha from './v1alpha';
-import * as v1beta from './v1beta';
 
 const OsConfigServiceClient = v1.OsConfigServiceClient;
 type OsConfigServiceClient = v1.OsConfigServiceClient;
 const OsConfigZonalServiceClient = v1.OsConfigZonalServiceClient;
 type OsConfigZonalServiceClient = v1.OsConfigZonalServiceClient;
 
-export {v1, v1alpha, v1beta, OsConfigServiceClient, OsConfigZonalServiceClient};
-export default {v1, v1alpha, v1beta, OsConfigServiceClient, OsConfigZonalServiceClient};
+export {v1, v1alpha, OsConfigServiceClient, OsConfigZonalServiceClient};
+export default {v1, v1alpha, OsConfigServiceClient, OsConfigZonalServiceClient};
 import * as protos from '../protos/protos';
 export {protos};

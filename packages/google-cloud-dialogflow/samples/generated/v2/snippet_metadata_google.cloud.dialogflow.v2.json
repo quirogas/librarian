@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-dialogflow",
-    "version": "7.6.0",
+    "version": "7.6.1",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -1899,7 +1899,7 @@
       "regionTag": "dialogflow_v2_generated_Conversations_ListMessages_async",
       "title": "dialogflow listMessages Sample",
       "origin": "API_DEFINITION",
-      "description": " Lists messages that belong to a given conversation. `messages` are ordered by `create_time` in descending order. To fetch updates without duplication, send request with filter `create_time_epoch_microseconds > [first item's create_time of previous request]` and empty page_token.",
+      "description": " Lists messages that belong to a given conversation. `messages` are ordered by `create_time` in descending order. To fetch updates without duplication, send request with filter `create_time_epoch_microseconds \u003e [first item's create_time of previous request]` and empty page_token.",
       "canonical": true,
       "file": "conversations.list_messages.js",
       "language": "JAVASCRIPT",

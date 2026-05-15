@@ -19,10 +19,10 @@
 import * as v1 from './v1';
 import * as v2 from './v2';
 
-const CloudBuildClient = v1.CloudBuildClient;
-type CloudBuildClient = v1.CloudBuildClient;
+const RepositoryManagerClient = v2.RepositoryManagerClient;
+type RepositoryManagerClient = v2.RepositoryManagerClient;
 
-export {v1, v2, CloudBuildClient};
-export default {v1, v2, CloudBuildClient};
+export {v1, v2, RepositoryManagerClient};
+export default {v1, v2, RepositoryManagerClient};
 import * as protos from '../protos/protos';
 export {protos};

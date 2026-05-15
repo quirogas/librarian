@@ -20,8 +20,8 @@ import * as v1 from './v1';
 import * as v1alpha from './v1alpha';
 import * as v1beta from './v1beta';
 
-const HypercomputeClusterClient = v1beta.HypercomputeClusterClient;
-type HypercomputeClusterClient = v1beta.HypercomputeClusterClient;
+const HypercomputeClusterClient = v1.HypercomputeClusterClient;
+type HypercomputeClusterClient = v1.HypercomputeClusterClient;
 
 export {v1, v1alpha, v1beta, HypercomputeClusterClient};
 export default {v1, v1alpha, v1beta, HypercomputeClusterClient};

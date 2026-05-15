@@ -20,12 +20,10 @@ import * as v1 from './v1';
 import * as v1beta1 from './v1beta1';
 import * as v2 from './v2';
 
-const ManagedNotebookServiceClient = v1.ManagedNotebookServiceClient;
-type ManagedNotebookServiceClient = v1.ManagedNotebookServiceClient;
-const NotebookServiceClient = v1.NotebookServiceClient;
-type NotebookServiceClient = v1.NotebookServiceClient;
+const NotebookServiceClient = v2.NotebookServiceClient;
+type NotebookServiceClient = v2.NotebookServiceClient;
 
-export {v1, v1beta1, v2, ManagedNotebookServiceClient, NotebookServiceClient};
-export default {v1, v1beta1, v2, ManagedNotebookServiceClient, NotebookServiceClient};
+export {v1, v1beta1, v2, NotebookServiceClient};
+export default {v1, v1beta1, v2, NotebookServiceClient};
 import * as protos from '../protos/protos';
 export {protos};

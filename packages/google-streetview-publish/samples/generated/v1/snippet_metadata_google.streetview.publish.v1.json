@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-publish",
-    "version": "0.4.1",
+    "version": "0.4.2",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -186,7 +186,7 @@
       "regionTag": "streetviewpublish_v1_generated_StreetViewPublishService_ListPhotos_async",
       "title": "StreetViewPublishService listPhotos Sample",
       "origin": "API_DEFINITION",
-      "description": " Lists all the [Photos][google.streetview.publish.v1.Photo] that belong to the user. > Note: Recently created photos that are still being indexed are not returned in the response.",
+      "description": " Lists all the [Photos][google.streetview.publish.v1.Photo] that belong to the user. \u003e Note: Recently created photos that are still being indexed are not returned in the response.",
       "canonical": true,
       "file": "street_view_publish_service.list_photos.js",
       "language": "JAVASCRIPT",
@@ -286,7 +286,7 @@
       "regionTag": "streetviewpublish_v1_generated_StreetViewPublishService_BatchUpdatePhotos_async",
       "title": "StreetViewPublishService batchUpdatePhotos Sample",
       "origin": "API_DEFINITION",
-      "description": " Updates the metadata of [Photos][google.streetview.publish.v1.Photo], such as pose, place association, connections, etc. Changing the pixels of photos is not supported. Note that if [BatchUpdatePhotos][google.streetview.publish.v1.StreetViewPublishService.BatchUpdatePhotos] fails, either critical fields are missing or there is an authentication error. Even if [BatchUpdatePhotos][google.streetview.publish.v1.StreetViewPublishService.BatchUpdatePhotos] succeeds, individual photos in the batch may have failures. These failures are specified in each [PhotoResponse.status][google.streetview.publish.v1.PhotoResponse.status] in [BatchUpdatePhotosResponse.results][google.streetview.publish.v1.BatchUpdatePhotosResponse.results]. See [UpdatePhoto][google.streetview.publish.v1.StreetViewPublishService.UpdatePhoto] for specific failures that can occur per photo. Only the fields specified in [updateMask][google.streetview.publish.v1.UpdatePhotoRequest.update_mask] field are used. If `updateMask` is not present, the update applies to all fields. The number of [UpdatePhotoRequest][google.streetview.publish.v1.UpdatePhotoRequest] messages in a [BatchUpdatePhotosRequest][google.streetview.publish.v1.BatchUpdatePhotosRequest] must not exceed 20. > Note: To update [Pose.altitude][google.streetview.publish.v1.Pose.altitude], [Pose.latLngPair][google.streetview.publish.v1.Pose.lat_lng_pair] has to be filled as well. Otherwise, the request will fail.",
+      "description": " Updates the metadata of [Photos][google.streetview.publish.v1.Photo], such as pose, place association, connections, etc. Changing the pixels of photos is not supported. Note that if [BatchUpdatePhotos][google.streetview.publish.v1.StreetViewPublishService.BatchUpdatePhotos] fails, either critical fields are missing or there is an authentication error. Even if [BatchUpdatePhotos][google.streetview.publish.v1.StreetViewPublishService.BatchUpdatePhotos] succeeds, individual photos in the batch may have failures. These failures are specified in each [PhotoResponse.status][google.streetview.publish.v1.PhotoResponse.status] in [BatchUpdatePhotosResponse.results][google.streetview.publish.v1.BatchUpdatePhotosResponse.results]. See [UpdatePhoto][google.streetview.publish.v1.StreetViewPublishService.UpdatePhoto] for specific failures that can occur per photo. Only the fields specified in [updateMask][google.streetview.publish.v1.UpdatePhotoRequest.update_mask] field are used. If `updateMask` is not present, the update applies to all fields. The number of [UpdatePhotoRequest][google.streetview.publish.v1.UpdatePhotoRequest] messages in a [BatchUpdatePhotosRequest][google.streetview.publish.v1.BatchUpdatePhotosRequest] must not exceed 20. \u003e Note: To update [Pose.altitude][google.streetview.publish.v1.Pose.altitude], [Pose.latLngPair][google.streetview.publish.v1.Pose.lat_lng_pair] has to be filled as well. Otherwise, the request will fail.",
       "canonical": true,
       "file": "street_view_publish_service.batch_update_photos.js",
       "language": "JAVASCRIPT",

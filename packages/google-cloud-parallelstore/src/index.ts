@@ -19,8 +19,8 @@
 import * as v1 from './v1';
 import * as v1beta from './v1beta';
 
-const ParallelstoreClient = v1beta.ParallelstoreClient;
-type ParallelstoreClient = v1beta.ParallelstoreClient;
+const ParallelstoreClient = v1.ParallelstoreClient;
+type ParallelstoreClient = v1.ParallelstoreClient;
 
 export {v1, v1beta, ParallelstoreClient};
 export default {v1, v1beta, ParallelstoreClient};

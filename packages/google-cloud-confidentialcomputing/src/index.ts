@@ -19,8 +19,8 @@
 import * as v1 from './v1';
 import * as v1alpha1 from './v1alpha1';
 
-const ConfidentialComputingClient = v1alpha1.ConfidentialComputingClient;
-type ConfidentialComputingClient = v1alpha1.ConfidentialComputingClient;
+const ConfidentialComputingClient = v1.ConfidentialComputingClient;
+type ConfidentialComputingClient = v1.ConfidentialComputingClient;
 
 export {v1, v1alpha1, ConfidentialComputingClient};
 export default {v1, v1alpha1, ConfidentialComputingClient};

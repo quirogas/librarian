@@ -19,8 +19,8 @@
 import * as v3 from './v3';
 import * as v3beta from './v3beta';
 
-const PolicyTroubleshooterClient = v3beta.PolicyTroubleshooterClient;
-type PolicyTroubleshooterClient = v3beta.PolicyTroubleshooterClient;
+const PolicyTroubleshooterClient = v3.PolicyTroubleshooterClient;
+type PolicyTroubleshooterClient = v3.PolicyTroubleshooterClient;
 
 export {v3, v3beta, PolicyTroubleshooterClient};
 export default {v3, v3beta, PolicyTroubleshooterClient};

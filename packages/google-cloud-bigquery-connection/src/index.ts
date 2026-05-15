@@ -17,12 +17,11 @@
 // ** All changes to this file may be overwritten. **
 
 import * as v1 from './v1';
-import * as v1beta1 from './v1beta1';
 
 const ConnectionServiceClient = v1.ConnectionServiceClient;
 type ConnectionServiceClient = v1.ConnectionServiceClient;
 
-export {v1, v1beta1, ConnectionServiceClient};
-export default {v1, v1beta1, ConnectionServiceClient};
+export {v1, ConnectionServiceClient};
+export default {v1, ConnectionServiceClient};
 import * as protos from '../protos/protos';
 export {protos};

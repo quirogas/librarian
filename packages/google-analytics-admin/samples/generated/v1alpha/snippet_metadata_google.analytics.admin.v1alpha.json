@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-admin",
-    "version": "9.0.1",
+    "version": "9.1.0",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -2031,7 +2031,7 @@
       "regionTag": "analyticsadmin_v1alpha_generated_AnalyticsAdminService_CreateDisplayVideo360AdvertiserLink_async",
       "title": "AnalyticsAdminService createDisplayVideo360AdvertiserLink Sample",
       "origin": "API_DEFINITION",
-      "description": " Creates a DisplayVideo360AdvertiserLink. This can only be utilized by users who have proper authorization both on the Google Analytics property and on the Display & Video 360 advertiser. Users who do not have access to the Display & Video 360 advertiser should instead seek to create a DisplayVideo360LinkProposal.",
+      "description": " Creates a DisplayVideo360AdvertiserLink. This can only be utilized by users who have proper authorization both on the Google Analytics property and on the Display \u0026 Video 360 advertiser. Users who do not have access to the Display \u0026 Video 360 advertiser should instead seek to create a DisplayVideo360LinkProposal.",
       "canonical": true,
       "file": "analytics_admin_service.create_display_video360_advertiser_link.js",
       "language": "JAVASCRIPT",
@@ -2371,7 +2371,7 @@
       "regionTag": "analyticsadmin_v1alpha_generated_AnalyticsAdminService_CancelDisplayVideo360AdvertiserLinkProposal_async",
       "title": "AnalyticsAdminService cancelDisplayVideo360AdvertiserLinkProposal Sample",
       "origin": "API_DEFINITION",
-      "description": " Cancels a DisplayVideo360AdvertiserLinkProposal. Cancelling can mean either: - Declining a proposal initiated from Display & Video 360 - Withdrawing a proposal initiated from Google Analytics After being cancelled, a proposal will eventually be deleted automatically.",
+      "description": " Cancels a DisplayVideo360AdvertiserLinkProposal. Cancelling can mean either: - Declining a proposal initiated from Display \u0026 Video 360 - Withdrawing a proposal initiated from Google Analytics After being cancelled, a proposal will eventually be deleted automatically.",
       "canonical": true,
       "file": "analytics_admin_service.cancel_display_video360_advertiser_link_proposal.js",
       "language": "JAVASCRIPT",
@@ -3659,7 +3659,7 @@
       "regionTag": "analyticsadmin_v1alpha_generated_AnalyticsAdminService_RunAccessReport_async",
       "title": "AnalyticsAdminService runAccessReport Sample",
       "origin": "API_DEFINITION",
-      "description": " Returns a customized report of data access records. The report provides records of each time a user reads Google Analytics reporting data. Access records are retained for up to 2 years. Data Access Reports can be requested for a property. Reports may be requested for any property, but dimensions that aren't related to quota can only be requested on Google Analytics 360 properties. This method is only available to Administrators. These data access records include GA UI Reporting, GA UI Explorations, GA Data API, and other products like Firebase & Admob that can retrieve data from Google Analytics through a linkage. These records don't include property configuration changes like adding a stream or changing a property's time zone. For configuration change history, see [searchChangeHistoryEvents](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1alpha/accounts/searchChangeHistoryEvents). To give your feedback on this API, complete the [Google Analytics Access Reports feedback](https://docs.google.com/forms/d/e/1FAIpQLSdmEBUrMzAEdiEKk5TV5dEHvDUZDRlgWYdQdAeSdtR4hVjEhw/viewform) form.",
+      "description": " Returns a customized report of data access records. The report provides records of each time a user reads Google Analytics reporting data. Access records are retained for up to 2 years. Data Access Reports can be requested for a property. Reports may be requested for any property, but dimensions that aren't related to quota can only be requested on Google Analytics 360 properties. This method is only available to Administrators. These data access records include GA UI Reporting, GA UI Explorations, GA Data API, and other products like Firebase \u0026 Admob that can retrieve data from Google Analytics through a linkage. These records don't include property configuration changes like adding a stream or changing a property's time zone. For configuration change history, see [searchChangeHistoryEvents](https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1alpha/accounts/searchChangeHistoryEvents). To give your feedback on this API, complete the [Google Analytics Access Reports feedback](https://docs.google.com/forms/d/e/1FAIpQLSdmEBUrMzAEdiEKk5TV5dEHvDUZDRlgWYdQdAeSdtR4hVjEhw/viewform) form.",
       "canonical": true,
       "file": "analytics_admin_service.run_access_report.js",
       "language": "JAVASCRIPT",

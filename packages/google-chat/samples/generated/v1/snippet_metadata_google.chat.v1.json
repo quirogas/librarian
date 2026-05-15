@@ -1,7 +1,7 @@
 {
   "clientLibrary": {
     "name": "nodejs-chat",
-    "version": "0.1.0",
+    "version": "0.24.0",
     "language": "TYPESCRIPT",
     "apis": [
       {
@@ -419,7 +419,7 @@
       "regionTag": "chat_v1_generated_ChatService_UploadAttachment_async",
       "title": "ChatService uploadAttachment Sample",
       "origin": "API_DEFINITION",
-      "description": " Uploads an attachment. For an example, see [Upload media as a file attachment](https://developers.google.com/workspace/chat/upload-media-attachments). Requires user [authentication](https://developers.google.com/workspace/chat/authenticate-authorize-chat-user) with one of the following [authorization scopes](https://developers.google.com/workspace/chat/authenticate-authorize#chat-api-scopes):   - `https://www.googleapis.com/auth/chat.messages.create`   - `https://www.googleapis.com/auth/chat.messages`   - `https://www.googleapis.com/auth/chat.import` (import mode spaces only) You can upload attachments up to 200 MB. Certain file types aren't supported. For details, see [File types blocked by Google Chat](https://support.google.com/chat/answer/7651457?&co=GENIE.Platform%3DDesktop#File%20types%20blocked%20in%20Google%20Chat).",
+      "description": " Uploads an attachment. For an example, see [Upload media as a file attachment](https://developers.google.com/workspace/chat/upload-media-attachments). Requires user [authentication](https://developers.google.com/workspace/chat/authenticate-authorize-chat-user) with one of the following [authorization scopes](https://developers.google.com/workspace/chat/authenticate-authorize#chat-api-scopes):   - `https://www.googleapis.com/auth/chat.messages.create`   - `https://www.googleapis.com/auth/chat.messages`   - `https://www.googleapis.com/auth/chat.import` (import mode spaces only) You can upload attachments up to 200 MB. Certain file types aren't supported. For details, see [File types blocked by Google Chat](https://support.google.com/chat/answer/7651457?\u0026co=GENIE.Platform%3DDesktop#File%20types%20blocked%20in%20Google%20Chat).",
       "canonical": true,
       "file": "chat_service.upload_attachment.js",
       "language": "JAVASCRIPT",

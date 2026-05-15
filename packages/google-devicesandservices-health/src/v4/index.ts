@@ -16,5 +16,5 @@
 // ** https://github.com/googleapis/gapic-generator-typescript **
 // ** All changes to this file may be overwritten. **
 
-export {DataPointsServiceClient} from './data_points_service_client';
-export {HealthProfileServiceClient} from './health_profile_service_client';
+export { DataPointsServiceClient } from './data_points_service_client';
+export { HealthProfileServiceClient } from './health_profile_service_client';
