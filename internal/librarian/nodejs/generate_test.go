@@ -699,7 +699,7 @@ func TestRestoreCopyrightYear(t *testing.T) {
 			if err := os.WriteFile(file, []byte(test.input), 0644); err != nil {
 				t.Fatal(err)
 			}
-			if err := restoreCopyrightYear(&config.Library{}, outDir, test.year); err != nil {
+			if err := restoreCopyrightYear(outDir, test.year); err != nil {
 				t.Fatal(err)
 			}
 			got, err := os.ReadFile(file)
@@ -715,7 +715,7 @@ func TestRestoreCopyrightYear(t *testing.T) {
 
 func TestRestoreCopyrightYear_SkipsMissingDirs(t *testing.T) {
 	outDir := t.TempDir()
-	if err := restoreCopyrightYear(&config.Library{}, outDir, "2020"); err != nil {
+	if err := restoreCopyrightYear(outDir, "2020"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -813,7 +813,7 @@ func TestCopyMissingProtos(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := copyMissingProtos(&config.Library{}, googleapisDir, outDir); err != nil {
+	if err := copyMissingProtos(googleapisDir, outDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1262,7 +1262,7 @@ func TestInjectV1SmallExports(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err := injectV1SmallExports(&config.Library{}, outDir)
+			err := injectV1SmallExports(outDir)
 			if (err != nil) != test.wantErr {
 				t.Errorf("injectV1SmallExports() error = %v, wantErr %v", err, test.wantErr)
 				return
@@ -1279,37 +1279,6 @@ func TestInjectV1SmallExports(t *testing.T) {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestInjectV1SmallExports_ESM(t *testing.T) {
-	outDir := t.TempDir()
-	esmSrc := filepath.Join(outDir, "esm", "src")
-	if err := os.MkdirAll(esmSrc, 0755); err != nil {
-		t.Fatal(err)
-	}
-	indexPath := filepath.Join(esmSrc, "index.ts")
-	input := "import * as v1 from './v1';\nexport {v1};\n"
-	if err := os.WriteFile(indexPath, []byte(input), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	library := &config.Library{
-		Nodejs: &config.NodejsPackage{
-			ESM: true,
-		},
-	}
-	if err := injectV1SmallExports(library, outDir); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := os.ReadFile(indexPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "import * as v1small from './v1small';\nimport * as v1 from './v1';\nexport {v1small, v1};\n"
-	if diff := cmp.Diff(want, string(got)); diff != "" {
-		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}
 }
 

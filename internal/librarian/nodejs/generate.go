@@ -74,7 +74,7 @@ func Generate(ctx context.Context, cfg *config.Config, library *config.Library, 
 	}
 
 	if library.Name == "google-cloud-compute" {
-		if err := injectV1SmallExports(library, outdir); err != nil {
+		if err := injectV1SmallExports(outdir); err != nil {
 			return fmt.Errorf("failed to inject v1small exports: %w", err)
 		}
 	}
@@ -104,22 +104,16 @@ func generateAPI(ctx context.Context, api *config.API, library *config.Library, 
 	if len(protos) == 0 {
 		return fmt.Errorf("no protos found in api %q", api.Path)
 	}
-
-	// Add additional protos (such as common_resources.proto) before deriving relative paths
-	protos = append(protos, nodejsAPI.AdditionalProtos...)
-	protos = unique(protos)
-
 	for index := range protos {
-		absProtoPath := protos[index]
-		if !filepath.IsAbs(absProtoPath) {
-			absProtoPath = filepath.Join(googleapisDir, absProtoPath)
-		}
-		rel, err := filepath.Rel(googleapisDir, absProtoPath)
+		rel, err := filepath.Rel(googleapisDir, protos[index])
 		if err != nil {
 			return fmt.Errorf("failed to make path %s relative: %w", protos[index], err)
 		}
 		protos[index] = rel
 	}
+
+	// Add additional protos from configuration.
+	protos = append(protos, nodejsAPI.AdditionalProtos...)
 
 	args, err := buildGeneratorArgs(api, library, googleapisDir, stagingDir, nodejsAPI)
 	if err != nil {
@@ -226,9 +220,6 @@ func buildGeneratorArgs(api *config.API, library *config.Library, googleapisDir,
 		if library.Nodejs.BundleConfig != "" {
 			args = append(args, "--bundle-config", library.Nodejs.BundleConfig)
 		}
-		if library.Nodejs.ESM {
-			args = append(args, "--format=esm")
-		}
 		for _, param := range library.Nodejs.ExtraProtocParameters {
 			args = append(args, "--"+param)
 		}
@@ -240,6 +231,9 @@ func buildGeneratorArgs(api *config.API, library *config.Library, googleapisDir,
 		}
 		if library.Nodejs.Mixins != "" {
 			args = append(args, "--mixins", library.Nodejs.Mixins)
+		}
+		if library.Nodejs.ESM {
+			args = append(args, "--format=esm")
 		}
 	}
 	return args, nil
@@ -316,7 +310,7 @@ func runPostProcessor(ctx context.Context, cfg *config.Config, library *config.L
 		return fmt.Errorf("failed to remove .OwlBot.yaml: %w", err)
 	}
 
-	if err := restoreCopyrightYear(library, outDir, library.CopyrightYear); err != nil {
+	if err := restoreCopyrightYear(outDir, library.CopyrightYear); err != nil {
 		return fmt.Errorf("failed to restore copyright year: %w", err)
 	}
 	if !slices.Contains(library.Keep, ".repo-metadata.json") {
@@ -325,14 +319,13 @@ func runPostProcessor(ctx context.Context, cfg *config.Config, library *config.L
 		}
 	}
 
-	if err := copyMissingProtos(library, googleapisDir, outDir); err != nil {
+	if err := copyMissingProtos(googleapisDir, outDir); err != nil {
 		return fmt.Errorf("failed to copy missing protos: %w", err)
 	}
 	compileArgs := []string{"src"}
 	if library.Nodejs != nil && library.Nodejs.ESM {
 		compileArgs = []string{"esm/src", "--esm"}
 	}
-
 	if err := command.RunInDir(ctx, outDir, "compileProtos", compileArgs...); err != nil {
 		return fmt.Errorf("failed to compile protos: %w", err)
 	}
@@ -388,16 +381,6 @@ func runPostProcessor(ctx context.Context, cfg *config.Config, library *config.L
 	return nil
 }
 
-func getSourceDirs(library *config.Library) (srcDir, testDir string) {
-	srcDir = "src"
-	testDir = "test"
-	if library.Nodejs != nil && library.Nodejs.ESM {
-		srcDir = "esm/src"
-		testDir = "esm/test"
-	}
-	return srcDir, testDir
-}
-
 // TODO(https://github.com/googleapis/google-cloud-node/issues/8286): gapic-generator-typescript
 // unconditionally generates redundant linter configuration files (.eslintignore, .eslintrc.json, etc.).
 // This post-processing cleanup function removes them unless explicitly kept in librarian.yaml.
@@ -433,14 +416,13 @@ func removeRedundantLinterFiles(library *config.Library, outDir string) error {
 
 // restoreCopyrightYear replaces the copyright year in generated source files
 // with the original year from the library configuration.
-func restoreCopyrightYear(library *config.Library, outDir, year string) error {
+func restoreCopyrightYear(outDir, year string) error {
 	if year == "" {
 		return nil
 	}
 	re := regexp.MustCompile(`Copyright \d{4} Google`)
 	replacement := []byte(fmt.Sprintf("Copyright %s Google", year))
-	srcDir, testDir := getSourceDirs(library)
-	for _, dir := range []string{srcDir, testDir} {
+	for _, dir := range []string{"src", "test"} {
 		d := filepath.Join(outDir, dir)
 		if _, err := os.Stat(d); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -496,18 +478,17 @@ func writeRepoMetadata(cfg *config.Config, library *config.Library, googleapisDi
 	return metadata.Write(outDir)
 }
 
-// copyMissingProtos reads *_proto_list.json files under the active output source folder and copies
+// copyMissingProtos reads *_proto_list.json files under outDir/src/ and copies
 // any referenced protos that are missing from outDir/protos/ using the source
 // files in googleapisDir. The generator copies the API's own protos but not
 // transitive dependencies (e.g. google/logging/type/log_severity.proto).
-func copyMissingProtos(library *config.Library, googleapisDir, outDir string) error {
+func copyMissingProtos(googleapisDir, outDir string) error {
 	googleapisDir, err := filepath.Abs(googleapisDir)
 	if err != nil {
 		return fmt.Errorf("failed to resolve googleapis directory: %w", err)
 	}
 
-	srcDir, _ := getSourceDirs(library)
-	lists, err := filepath.Glob(filepath.Join(outDir, srcDir, "*", "*_proto_list.json"))
+	lists, err := filepath.Glob(filepath.Join(outDir, "src", "*", "*_proto_list.json"))
 	if err != nil {
 		return fmt.Errorf("failed to glob proto list files: %w", err)
 	}
@@ -701,27 +682,8 @@ func DefaultOutput(name, defaultOutput string) string {
 // TODO(https://github.com/googleapis/google-cloud-node/issues/8149):
 // This function is a temporary workaround to preserve v1small exports in the compute library.
 // It must be deleted once v1small is formally deprecated and removed.
-func injectV1SmallExports(library *config.Library, outDir string) error {
-	srcDir, _ := getSourceDirs(library)
-	indexPaths := []string{filepath.Join(outDir, srcDir, "index.ts")}
-
-	// If ESM is active, we also verify and inject into standard CJS index stubs if present
-	if srcDir != "src" {
-		cjsIndex := filepath.Join(outDir, "src", "index.ts")
-		if _, err := os.Stat(cjsIndex); err == nil {
-			indexPaths = append(indexPaths, cjsIndex)
-		}
-	}
-
-	for _, indexPath := range indexPaths {
-		if err := injectV1SmallExportsIntoFile(indexPath); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func injectV1SmallExportsIntoFile(indexPath string) error {
+func injectV1SmallExports(outDir string) error {
+	indexPath := filepath.Join(outDir, "src", "index.ts")
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
 		return err
@@ -742,9 +704,8 @@ func injectV1SmallExportsIntoFile(indexPath string) error {
 	content = updated
 
 	// 2. Inject into export blocks (both named and default)
-	// We search for both multi-export ("{v1,") and single-export ("{v1}") blocks
+	// We search for \"{v1,\" and replace with \"{v1small, v1,\"
 	updated = strings.ReplaceAll(content, "{v1,", "{v1small, v1,")
-	updated = strings.ReplaceAll(updated, "{v1}", "{v1small, v1}")
 	if updated == content {
 		return fmt.Errorf("could not find v1 export in %s", indexPath)
 	}
