@@ -30,7 +30,11 @@ var (
 )
 
 func fetchGoogleapis(ctx context.Context) (*config.Source, error) {
-	return fetchGoogleapisWithCommit(ctx, githubEndpoints, fetch.DefaultBranchMaster)
+	return &config.Source{
+		Commit: "local",
+		SHA256: "local",
+		Dir:    "/usr/local/google/home/santiquiroga/Documents/googleapis/node_workspace/tasks/milestone_planning/googleapis",
+	}, nil
 }
 
 func fetchGoogleapisWithCommit(ctx context.Context, endpoints *fetch.Endpoints, commitish string) (*config.Source, error) {
