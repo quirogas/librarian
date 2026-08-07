@@ -102,6 +102,9 @@ func env(binDir string) ([]string, error) {
 	env = append(env, "PNPM_CONFIG_GLOBAL_BIN_DIR="+binDir)
 	env = append(env, "PNPM_CONFIG_GLOBAL_DIR="+globalDir)
 	env = append(env, "PNPM_CONFIG_STORE_DIR="+storeDir)
+	// Both PNPM v7 and v8+ CLI flags rely on NPM_CONFIG_* overrides when parsing global bin destinations.
+	env = append(env, "NPM_CONFIG_GLOBAL_BIN_DIR="+binDir)
+	env = append(env, "npm_config_global_bin_dir="+binDir)
 	env = append(env, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return env, nil
 }

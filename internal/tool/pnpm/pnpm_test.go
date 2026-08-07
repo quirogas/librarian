@@ -242,6 +242,12 @@ func TestEnv(t *testing.T) {
 	if got := envMap["PNPM_CONFIG_GLOBAL_BIN_DIR"]; got != binDir {
 		t.Errorf("PNPM_CONFIG_GLOBAL_BIN_DIR = %q, want %q", got, binDir)
 	}
+	if got := envMap["NPM_CONFIG_GLOBAL_BIN_DIR"]; got != binDir {
+		t.Errorf("NPM_CONFIG_GLOBAL_BIN_DIR = %q, want %q", got, binDir)
+	}
+	if got := envMap["npm_config_global_bin_dir"]; got != binDir {
+		t.Errorf("npm_config_global_bin_dir = %q, want %q", got, binDir)
+	}
 	if got := envMap["PNPM_CONFIG_GLOBAL_DIR"]; got != wantGlobalDir {
 		t.Errorf("PNPM_CONFIG_GLOBAL_DIR = %q, want %q", got, wantGlobalDir)
 	}
