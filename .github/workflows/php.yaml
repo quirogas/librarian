@@ -36,7 +36,7 @@ jobs:
       - name: "Set up pnpm via corepack"
         run: |
           corepack enable pnpm
-          corepack prepare pnpm@7.32.2 --activate
+          corepack prepare pnpm@8.15.9 --activate
       - name: Setup test configuration
         run: cp ./tool/cmd/migrate/librarian_php.yaml librarian.yaml
       - name: Install dependencies

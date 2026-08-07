@@ -48,7 +48,7 @@ jobs:
       - name: "Set up pnpm via corepack"
         run: |
           corepack enable pnpm
-          corepack prepare pnpm@7.32.2 --activate
+          corepack prepare pnpm@8.15.9 --activate
       - name: "Install Node.js dependencies (resolve cache paths)"
         id: tool-paths
         run: |
